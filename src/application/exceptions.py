@@ -31,3 +31,9 @@ class RouteDependencyError(AppError):
     """Raised when route traversal is missing required dependencies."""
 
     code = "app.route.dependency"
+
+
+class RetrieveDependencyError(AppError):
+    """Raised when retrieval is missing required dependencies."""
+
+    code = "app.retrieve.dependency"

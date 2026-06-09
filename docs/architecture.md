@@ -163,12 +163,18 @@ Current external-service ports:
 - `Search`
 - `Ranker`
 
-Current concrete external-service adapters:
+Current concrete adapters for these ports:
 
 - `OpenAIEmbedder` in `src/infrastructure/embeddings.py` implements
   `Embedder` through the OpenAI SDK. It is selected by passing
   `EmbeddingProvider.OPENAI` to `make_embedder`, configured through
   `Settings.embedding`, and wired into `App` for `Ingest` and `Retrieve`.
+- `LangSummarizer` in `src/infrastructure/agents/summarizer.py` implements
+  `Summarizer` through a LangChain chat model and structured response
+  validation. It is not wired into `App` yet.
+- `SqlSearch` in `src/infrastructure/search.py` implements `Search` through a
+  scoped SQL document lookup and deterministic in-process vector scoring. It
+  populates vector distance and leaves `bm25` empty until lexical scoring lands.
 
 Current repository and transaction ports:
 
