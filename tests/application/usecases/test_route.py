@@ -203,3 +203,43 @@ async def test_route_passes_seen_ids_to_branch_queries() -> None:
     assert result == [NodeHit(new_leaf, 0.1), NodeHit(seen_leaf, 0.3)]
     assert nodes.near_calls[1].parent == branch.id
     assert nodes.near_calls[1].exclude == {root.id, branch.id, seen_leaf.id}
+
+
+@pytest.mark.asyncio
+async def test_route_prunes_branch_beam_after_sorting() -> None:
+    # Arrange
+    root = node(1, kind="branch")
+    first_branch = node(2, kind="branch")
+    second_branch = node(3, kind="branch")
+    dropped_branch = node(4, kind="branch")
+    later_closest = node(5, kind="branch")
+    later_second = node(6, kind="branch")
+    nodes = FakeNodes(
+        root=root,
+        hits={
+            root.id: [
+                NodeHit(first_branch, 0.1),
+                NodeHit(second_branch, 0.2),
+            ],
+            first_branch.id: [
+                NodeHit(dropped_branch, 0.4),
+            ],
+            second_branch.id: [
+                NodeHit(later_second, 0.02),
+                NodeHit(later_closest, 0.01),
+            ],
+        },
+    )
+
+    # Act
+    result = await Route(nodes).run(vector(1.0), limit=2)
+
+    # Assert
+    assert result == []
+    assert [call.parent for call in nodes.near_calls] == [
+        root.id,
+        first_branch.id,
+        second_branch.id,
+        later_closest.id,
+        later_second.id,
+    ]
