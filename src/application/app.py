@@ -47,6 +47,7 @@ class App:
             embedder=self.embedder,
             seed=self.seed_case,
             route=self.route_case,
+            max_leaf_docs=settings.ingest.max_leaf_docs,
         )
         self.retrieve_case = Retrieve(
             search=self.search,

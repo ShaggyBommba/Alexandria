@@ -231,7 +231,8 @@ here, not in repositories.
 
 Accepts `DocIn`, embeds and summarizes the document through ports, routes to a
 leaf, persists the document, updates node counts, and appends a `split.check`
-job when the leaf becomes full.
+job when the configured `Settings.ingest.max_leaf_docs` threshold marks the
+leaf full.
 
 The document write, count update, and outbox append should share one unit of
 work when the split job must be durable.
