@@ -1,0 +1,67 @@
+version: '3'
+
+dotenv: ['.env']
+
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  sync:
+    desc: Sync the full uv workspace
+    cmds:
+      - uv sync
+
+  test:
+    desc: Run all tests in parallel
+    cmds:
+      - uv run pytest
+
+  lint:
+    desc: Lint all modules in parallel
+    cmds:
+      - uv run python -m compileall src
+
+  fmt:
+    desc: Format all modules in parallel
+    cmds:
+      - uv run python -m compileall src tests
+
+  check:
+    desc: Run lint, then tests
+    deps:
+      - lint
+      - test
+    
+  api:
+    desc: Start the API server and worker
+    cmds:
+      - lsof -i :8002 -t | xargs -r kill -9
+      - lsof -i :9002 -t | xargs -r kill -9
+      - uv run api & uv run worker
+
+  deploy:
+    desc: Build and start the Docker Compose stack
+    vars:
+      BUILD_FLAG: '{{.BUILD_FLAG | default "--build"}}'
+      PROFILE_FLAG: '{{.PROFILE_FLAG | default "--profile infrastructure"}}'
+    cmds:
+      - docker compose {{.PROFILE_FLAG}} up -d {{.BUILD_FLAG}} {{.CLI_ARGS}}
+
+  redeploy:
+    desc: Recreate the Docker Compose stack from scratch
+    vars:
+      BUILD_FLAG: '{{.BUILD_FLAG | default "--build"}}'
+      PROFILE_FLAG: '{{.PROFILE_FLAG | default "--profile infrastructure"}}'
+    cmds:
+      - docker compose {{.PROFILE_FLAG}} down --remove-orphans
+      - docker compose {{.PROFILE_FLAG}} up -d {{.BUILD_FLAG}} {{.CLI_ARGS}}
+
+  logs:
+    desc: Tail logs for the Docker Compose stack
+    vars:
+      PROFILE_FLAG: '{{.PROFILE_FLAG | default "--profile infrastructure"}}'
+    cmds:
+      - docker compose {{.PROFILE_FLAG}} logs -f {{.CLI_ARGS}}
