@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from domain.entity import Node
-
+from application.exceptions import MissingUnitOfWork
 from application.ports import UnitOfWork
+from domain.entity import VECTOR_DIMENSIONS, Node
 
 
 class Seed:
@@ -30,4 +30,22 @@ class Seed:
 
     async def run(self) -> Node:
         """Return the existing root or create the first root node."""
-        raise NotImplementedError("Seed.run is not implemented yet")
+        if self.uow is None:
+            raise MissingUnitOfWork("Seed requires a UnitOfWork")
+
+        uow = self.uow
+        root = await uow.nodes.root()
+        if root is not None:
+            return root
+
+        root = Node(
+            parent_id=None,
+            name="Root",
+            description="Stable root for the Alexandria semantic index.",
+            embedding=[1.0] + [0.0] * (VECTOR_DIMENSIONS - 1),
+            kind="leaf",
+            status="active",
+        )
+        await uow.nodes.add(root)
+        await uow.commit()
+        return root
