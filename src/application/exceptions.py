@@ -13,7 +13,15 @@ class MissingUnitOfWork(AppError):
     """Raised when a use case requiring durable writes has no unit of work."""
 
     code = "app.missing_unit_of_work"
+
+
 class RouteDependencyError(AppError):
     """Raised when route traversal is missing required dependencies."""
 
     code = "app.route.dependency"
+
+
+class RetrieveDependencyError(AppError):
+    """Raised when retrieval is missing required dependencies."""
+
+    code = "app.retrieve.dependency"
