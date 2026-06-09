@@ -1,1 +1,71 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment and secrets
 .env
+.env.*
+!.env.example
+!.env.sample
+
+# Build and packaging artifacts
+build/
+dist/
+sdist/
+wheels/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Test, coverage, lint, and type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.tox/
+.nox/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+dmypy.json
+.dmypy.json
+
+# Runtime output
+.logs/
+logs/
+*.log
+*.pid
+*.prof
+*.pstats
+
+# Local databases and generated state
+*.db
+*.sqlite
+*.sqlite3
+
+# Notebook and REPL artifacts
+.ipynb_checkpoints/
+.jupyter/
+.python_history
+
+# Tool caches
+.cache/
+.parcel-cache/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
