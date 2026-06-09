@@ -8,7 +8,12 @@ from application.usecases.seed import Seed
 
 
 class Ingest:
-    """Attaches one document to the best matching leaf."""
+    """Attaches one document to the best matching leaf.
+
+    Flow: summarize and embed the document, ensure the root exists, route
+    through the tree, persist the document on the chosen leaf, then queue
+    split-check work when the leaf becomes full.
+    """
 
     def __init__(
         self,

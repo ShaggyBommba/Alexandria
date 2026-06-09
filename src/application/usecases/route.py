@@ -4,7 +4,11 @@ from application.ports import NodeHit, NodeRepo
 
 
 class Route:
-    """Walks the tree from root to candidate leaves."""
+    """Walks the tree from root to candidate leaves.
+
+    Flow: start at the root, use embedding distance over children, keep a beam
+    of promising paths, and return several leaf candidates for later expansion.
+    """
 
     def __init__(self, nodes: NodeRepo | None = None) -> None:
         self.nodes = nodes

@@ -6,9 +6,10 @@ describes the current Alexandria model, boundaries, workflows, and
 implementation order.
 
 Alexandria is a dynamic semantic index. Documents are attached to leaf nodes in
-a tree. Nodes and documents have embeddings. Leaf nodes also have directed
-semantic references to other leaves. As the database grows, full leaves are
-queued for LLM-assisted splitting so the index can expand.
+a tree. Nodes and documents have embeddings. Document bodies and summaries are
+also available to BM25-style lexical search. Leaf nodes have directed semantic
+references to other leaves. As the database grows, full leaves are queued for
+LLM-assisted splitting so the index can expand.
 
 ## Layers
 
@@ -89,8 +90,11 @@ Runtime meaning:
 
 - A document belongs to one current leaf.
 - `source_key` is the optional idempotency key for external source identity.
-- Retrieval returns document hits after tree routing, reference expansion, and
-  ranking.
+- `embedding` supports vector search inside routed leaf scope.
+- `body` and `summary` support BM25-style lexical search inside routed leaf
+  scope.
+- Retrieval returns document hits after tree routing, reference expansion,
+  hybrid search, and ranking.
 
 ### Reference
 
@@ -141,7 +145,8 @@ Shared ports and boundary values live in `src/application/ports.py`.
 Current result shapes:
 
 - `NodeHit`
-- `DocHit`
+- `DocHit`: document plus hybrid score, optional vector distance, and optional
+  BM25 score
 - `RefHit`
 
 Current input and adapter-output shapes:
@@ -155,6 +160,7 @@ Current external-service ports:
 - `Embedder`
 - `Summarizer`
 - `Splitter`
+- `Search`
 - `Ranker`
 
 Current repository and transaction ports:
@@ -166,7 +172,15 @@ Current repository and transaction ports:
 - `UnitOfWork`
 
 Repositories should persist and fetch. They should not decide traversal policy,
-fullness policy, split policy, retry behavior, or ranking behavior.
+fullness policy, split policy, retry behavior, hybrid search behavior, or
+ranking behavior.
+
+`DocumentRepo` is persistence-focused. It should store, load, move, save, and
+remove documents. It should not own BM25/vector hybrid retrieval.
+
+The `Search` port owns document retrieval inside an already-scoped leaf set. A
+concrete infrastructure adapter may combine embeddings, BM25, SQL, database
+extensions, or external search engines behind this port.
 
 ## Outbox
 
@@ -241,7 +255,11 @@ references.
 ### Retrieve
 
 Embeds a query, routes through the tree, expands the candidate set through
-references, fetches nearby documents, and returns ranked document hits.
+references, runs hybrid document search inside the scoped leaves, and returns
+ranked document hits.
+
+Retrieval should not call `DocumentRepo` for ranking or hybrid lookup.
+`DocumentRepo` persists documents; `Search` finds relevant documents.
 
 ### Rerank
 
@@ -270,13 +288,14 @@ query
 embed query
 route through tree to candidate leaves
 expand candidate leaves through references
-fetch nearest documents
+hybrid search scoped documents with embedding and BM25
 rerank
 return top results
 ```
 
-The first implementation should work with deterministic embedding distance
-before introducing an LLM or agent loop.
+The first implementation should keep the tree route and hybrid document search
+as separate boundaries. Deterministic scoring should work before introducing an
+LLM or agent loop.
 
 ## Ingest Flow
 
@@ -332,10 +351,11 @@ Current preferred order:
 6. Implement `Ingest`.
 7. Implement `Lint` and `Split`.
 8. Implement `Refs`.
-9. Implement deterministic `Retrieve`.
-10. Implement `Rerank`.
-11. Wire concrete adapters through `App`, workers, API, CLI, and MCP.
-12. Update docs when a boundary, workflow, or durable model changes.
+9. Implement deterministic `Search` over scoped leaves.
+10. Implement deterministic `Retrieve`.
+11. Implement `Rerank`.
+12. Wire concrete adapters through `App`, workers, API, CLI, and MCP.
+13. Update docs when a boundary, workflow, or durable model changes.
 
 ## Validation
 
@@ -374,6 +394,7 @@ Preserve these local boundaries unless this document is intentionally updated:
 
 - Application usecases own workflow decisions.
 - Repositories persist and fetch.
+- Hybrid document retrieval goes through the `Search` port.
 - External SDKs, LLM clients, and provider frameworks stay in infrastructure
   adapters.
 - Multi-write workflows use a unit of work when atomicity matters.

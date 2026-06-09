@@ -29,7 +29,10 @@ class App:
         self.session = self.db.session()
         self.outbox = OutboxRepo(self.session, settings.queue)
         self.queue = self.outbox
+        self.search = None
 
+        # Each case is wired as a workflow boundary. Concrete repository,
+        # search, LLM, and ranking adapters can be injected here as they land.
         self.seed_case = Seed()
         self.route_case = Route()
         self.rerank_case = Rerank()
@@ -37,7 +40,12 @@ class App:
         self.split_case = Split()
         self.lint_case = Lint(split=self.split_case)
         self.ingest_case = Ingest(seed=self.seed_case, route=self.route_case)
-        self.retrieve_case = Retrieve(route=self.route_case, rerank=self.rerank_case)
+        self.retrieve_case = Retrieve(
+            search=self.search,
+            route=self.route_case,
+            refs=None,
+            rerank=self.rerank_case,
+        )
 
         self.setup()
 
@@ -53,7 +61,8 @@ class App:
     async def route(self, embedding: list[float], limit: int = 10) -> list[NodeHit]:
         """Find candidate leaf nodes for an embedding."""
         # Walk from the root through child nodes by embedding distance.
-        # Keep multiple candidates so later use cases can apply beam-search policy.
+        # Keep a beam of candidate paths so ingest and retrieval can choose from
+        # several plausible leaves instead of committing to one early branch.
         return await self.route_case.run(embedding, limit=limit)
 
     async def ingest(self, doc: DocIn) -> UUID:
@@ -88,9 +97,10 @@ class App:
 
     async def retrieve(self, query: str, limit: int = 10) -> list[DocHit]:
         """Return documents relevant to a query."""
-        # Embed the query and route it through the tree to candidate leaves.
-        # Expand the candidate set with references from those leaves.
-        # Fetch nearby documents, rerank them, and return the top results.
+        # Embed the query and route it through the tree with beam search.
+        # Expand routed leaves through directed references to widen the scope.
+        # Run hybrid search over scoped documents using embeddings plus BM25.
+        # Rerank the hybrid candidates and return the final top results.
         return await self.retrieve_case.run(query, limit=limit)
 
     async def rerank(self, query: str, hits: list[DocHit], limit: int = 10) -> list[DocHit]:

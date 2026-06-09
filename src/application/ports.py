@@ -20,10 +20,12 @@ class NodeHit:
 
 @dataclass(frozen=True)
 class DocHit:
-    """Document plus query distance."""
+    """Document hit returned by hybrid search or reranking."""
 
     doc: Document
-    distance: float
+    score: float
+    distance: float | None = None
+    bm25: float | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,17 @@ class Ranker(Protocol):
 
 
 @runtime_checkable
+class Search(Protocol):
+    async def find(
+        self,
+        query: str,
+        embedding: list[float],
+        leaves: set[UUID],
+        limit: int,
+    ) -> list[DocHit]: ...
+
+
+@runtime_checkable
 class NodeRepo(Protocol):
     async def add(self, node: Node) -> UUID: ...
     async def get(self, id: UUID) -> Node | None: ...
@@ -105,12 +118,6 @@ class DocumentRepo(Protocol):
     async def add(self, doc: Document) -> UUID: ...
     async def get(self, id: UUID) -> Document | None: ...
     async def leaf(self, id: UUID) -> list[Document]: ...
-    async def near(
-        self,
-        embedding: list[float],
-        limit: int,
-        leaves: set[UUID] | None = None,
-    ) -> list[DocHit]: ...
     async def move(self, ids: list[UUID], leaf: UUID) -> None: ...
     async def save(self, doc: Document) -> None: ...
     async def rm(self, id: UUID) -> None: ...

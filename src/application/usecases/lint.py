@@ -7,7 +7,11 @@ from application.usecases.split import Split
 
 
 class Lint:
-    """Checks whether a queued node still needs splitting."""
+    """Checks whether a queued node still needs splitting.
+
+    Flow: reload the queued node after claim, verify the current durable state,
+    skip stale work, and delegate to split only when the leaf is still full.
+    """
 
     def __init__(
         self,

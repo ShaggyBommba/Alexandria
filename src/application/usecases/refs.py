@@ -6,7 +6,11 @@ from application.ports import UnitOfWork
 
 
 class Refs:
-    """Rebuilds directed semantic references for a node."""
+    """Rebuilds directed semantic references for a node.
+
+    Flow: clear stale outgoing references, compare the node with active leaves,
+    and store the strongest directed links used to widen retrieval scope.
+    """
 
     def __init__(self, uow: UnitOfWork | None = None) -> None:
         self.uow = uow
