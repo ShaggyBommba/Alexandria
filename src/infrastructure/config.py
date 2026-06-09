@@ -1,3 +1,4 @@
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -35,7 +36,25 @@ class QueueSettings(BaseModel):
     enabled: bool = True
     max_attempts: int = 5
     batch_size: int = 25
-    
+
+
+class EmbeddingProvider(StrEnum):
+    """Supported embedding provider adapters."""
+
+    OPENAI = "openai"
+
+
+class EmbeddingSettings(BaseModel):
+    """Configuration for an OpenAI-compatible embedding endpoint."""
+
+    provider: EmbeddingProvider = EmbeddingProvider.OPENAI
+    base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
+    api_key: str | None = None
+    model: str = Field(default="text-embedding-3-small", min_length=1)
+    dimensions: int | None = Field(default=None, gt=0)
+    timeout_seconds: float = Field(default=30.0, gt=0)
+
+
 class SQLSettings(BaseModel):
     """Configuration for the database used by repositories."""
 
@@ -58,6 +77,7 @@ class Settings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     database: SQLSettings = Field(default_factory=SQLSettings)
     queue: QueueSettings = Field(default_factory=QueueSettings)
+    embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
 
     model_config = SettingsConfigDict(
         env_prefix="ALEXANDRIA_",
