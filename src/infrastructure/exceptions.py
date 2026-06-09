@@ -9,6 +9,10 @@ class InfraError(BaseError):
     code = "infra.error"
     retryable = True
 
+class AgentError(InfraError):
+    """Base class for expected agent adapter errors."""
+
+    code = "infra.agent.error"
 
 class EmbedderError(InfraError):
     """Base class for expected embedding adapter errors."""
