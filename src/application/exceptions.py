@@ -7,3 +7,9 @@ class AppError(BaseError):
     """Base class for expected application workflow errors."""
 
     code = "app.error"
+
+
+class RouteDependencyError(AppError):
+    """Raised when route traversal is missing required dependencies."""
+
+    code = "app.route.dependency"
