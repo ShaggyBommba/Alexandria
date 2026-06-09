@@ -10,6 +10,12 @@ class InfraError(BaseError):
     retryable = True
 
 
+class AgentError(InfraError):
+    """Raised when an LLM agent adapter fails."""
+
+    code = "infra.agent.error"
+
+
 class ReferenceRepoError(InfraError):
     """Base class for expected reference repository errors."""
 
