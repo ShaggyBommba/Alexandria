@@ -8,3 +8,16 @@ class InfraError(BaseError):
 
     code = "infra.error"
     retryable = True
+
+
+class ReferenceRepoError(InfraError):
+    """Base class for expected reference repository errors."""
+
+    code = "infra.reference_repo.error"
+
+
+class ReferenceSourceMismatch(ReferenceRepoError):
+    """Raised when replacement refs do not belong to the requested source."""
+
+    code = "infra.reference_repo.source_mismatch"
+    retryable = False
