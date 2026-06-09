@@ -25,4 +25,10 @@ class Rerank:
 
     async def run(self, query: str, hits: list[DocHit], limit: int = 10) -> list[DocHit]:
         """Return ranked document hits using the adapter or deterministic scores."""
-        raise NotImplementedError("Rerank.run is not implemented yet")
+        if limit <= 0:
+            return []
+
+        if self.ranker is not None:
+            return await self.ranker.rank(query, hits, limit)
+
+        return sorted(hits, key=lambda hit: hit.score, reverse=True)[:limit]
