@@ -10,6 +10,39 @@ class InfraError(BaseError):
     retryable = True
 
 
+class EmbedderError(InfraError):
+    """Base class for expected embedding adapter errors."""
+
+    code = "infra.embedder.error"
+
+
+class EmbedderConfigError(EmbedderError):
+    """Raised when embedding adapter settings cannot be used."""
+
+    code = "infra.embedder.config"
+    retryable = False
+
+
+class EmbedderClientError(EmbedderError):
+    """Raised when the embedding endpoint cannot serve the request."""
+
+    code = "infra.embedder.client"
+
+
+class EmbedderRequestError(EmbedderError):
+    """Raised when the embedding endpoint rejects the request permanently."""
+
+    code = "infra.embedder.request"
+    retryable = False
+
+
+class EmbedderResponseError(EmbedderError):
+    """Raised when the embedding endpoint returns unusable data."""
+
+    code = "infra.embedder.response"
+    retryable = False
+
+
 class ReferenceRepoError(InfraError):
     """Base class for expected reference repository errors."""
 

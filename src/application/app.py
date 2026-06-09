@@ -12,6 +12,7 @@ from application.usecases.route import Route
 from application.usecases.seed import Seed
 from application.usecases.split import Split
 from infrastructure.config import Settings, get_settings
+from infrastructure.embeddings import make_embedder
 from infrastructure.repositories.db import Db
 from infrastructure.observability.logger import LoggingService
 from infrastructure.repositories.outbox import OutboxRepo
@@ -29,6 +30,7 @@ class App:
         self.session = self.db.session()
         self.outbox = OutboxRepo(self.session, settings.queue)
         self.queue = self.outbox
+        self.embedder = make_embedder(settings.embedding.provider, settings.embedding)
         self.search = None
 
         # Each case is wired as a workflow boundary. Concrete repository,
@@ -39,9 +41,14 @@ class App:
         self.refs_case = Refs()
         self.split_case = Split()
         self.lint_case = Lint(split=self.split_case)
-        self.ingest_case = Ingest(seed=self.seed_case, route=self.route_case)
+        self.ingest_case = Ingest(
+            embedder=self.embedder,
+            seed=self.seed_case,
+            route=self.route_case,
+        )
         self.retrieve_case = Retrieve(
             search=self.search,
+            embedder=self.embedder,
             route=self.route_case,
             refs=None,
             rerank=self.rerank_case,

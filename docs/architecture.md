@@ -163,6 +163,13 @@ Current external-service ports:
 - `Search`
 - `Ranker`
 
+Current concrete external-service adapters:
+
+- `OpenAIEmbedder` in `src/infrastructure/embeddings.py` implements
+  `Embedder` through the OpenAI SDK. It is selected by passing
+  `EmbeddingProvider.OPENAI` to `make_embedder`, configured through
+  `Settings.embedding`, and wired into `App` for `Ingest` and `Retrieve`.
+
 Current repository and transaction ports:
 
 - `NodeRepo`
