@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from datetime import datetime
 from uuid import UUID
@@ -196,15 +197,23 @@ async def test_clean_read_context_returns_loaded_detached_objects(sessions, now)
 
 
 @pytest.mark.asyncio
-async def test_reused_unit_of_work_opens_session_per_context_scope(sessions, now) -> None:
+async def test_reused_unit_of_work_opens_session_per_task_scope(sessions, now) -> None:
     shared = SqlUnitOfWork(sessions, now=lambda: now)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    seen_sessions: list[Session] = []
 
-    async with shared as first:
-        async with shared as second:
-            assert first.session is not second.session
-            assert first.nodes is not second.nodes
+    async def enter_scope() -> None:
+        async with shared as uow:
+            seen_sessions.append(uow.session())
+            if len(seen_sessions) == 2:
+                entered.set()
+            await release.wait()
 
-        await first.nodes.add(node(1))
-        await first.commit()
+    first = asyncio.create_task(enter_scope())
+    second = asyncio.create_task(enter_scope())
+    await entered.wait()
+    release.set()
+    await asyncio.gather(first, second)
 
-    assert row(sessions, Node, uid(1)).name == "Node 1"
+    assert seen_sessions[0] is not seen_sessions[1]
