@@ -177,3 +177,34 @@ async def test_context_rolls_back_without_commit(sessions, now) -> None:
         await uow.nodes.add(leaf)
 
     assert row(sessions, Node, leaf.id) is None
+
+
+@pytest.mark.asyncio
+async def test_clean_read_context_returns_loaded_detached_objects(sessions, now) -> None:
+    leaf = node(1)
+    leaf_id = leaf.id
+    with sessions() as session:
+        session.add(leaf)
+        session.commit()
+
+    async with SqlUnitOfWork(sessions, now=lambda: now) as uow:
+        loaded = await uow.nodes.get(leaf_id)
+        assert loaded is not None
+
+    assert loaded.name == "Node 1"
+    assert loaded.description == "Description 1"
+
+
+@pytest.mark.asyncio
+async def test_reused_unit_of_work_opens_session_per_context_scope(sessions, now) -> None:
+    shared = SqlUnitOfWork(sessions, now=lambda: now)
+
+    async with shared as first:
+        async with shared as second:
+            assert first.session is not second.session
+            assert first.nodes is not second.nodes
+
+        await first.nodes.add(node(1))
+        await first.commit()
+
+    assert row(sessions, Node, uid(1)).name == "Node 1"
