@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from application.app import App
-from infrastructure.config import Settings
+from infrastructure.config import IngestSettings, Settings
 
 
 class FakeDb:
@@ -42,11 +42,13 @@ def test_app_wires_route_with_node_repository(monkeypatch) -> None:
     monkeypatch.setattr(app_module, "make_embedder", lambda provider, settings: FakeEmbedder())
 
     # Act
-    app = App(Settings(_env_file=None))
+    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=7))
+    app = App(settings)
 
     # Assert
     assert isinstance(app.nodes, FakeNodeRepo)
     assert app.nodes.session is app.session
     assert app.route_case.nodes is app.nodes
     assert app.ingest_case.route is app.route_case
+    assert app.ingest_case.max_leaf_docs == 7
     assert app.retrieve_case.route is app.route_case

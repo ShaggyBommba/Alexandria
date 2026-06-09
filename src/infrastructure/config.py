@@ -38,6 +38,12 @@ class QueueSettings(BaseModel):
     batch_size: int = 25
 
 
+class IngestSettings(BaseModel):
+    """Configuration for document ingest workflow policy."""
+
+    max_leaf_docs: int = Field(default=100, gt=0)
+
+
 class EmbeddingProvider(StrEnum):
     """Supported embedding provider adapters."""
 
@@ -77,6 +83,7 @@ class Settings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     database: SQLSettings = Field(default_factory=SQLSettings)
     queue: QueueSettings = Field(default_factory=QueueSettings)
+    ingest: IngestSettings = Field(default_factory=IngestSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
 
     model_config = SettingsConfigDict(
