@@ -85,6 +85,22 @@ class Ranker(Protocol):
 
 @runtime_checkable
 class Search(Protocol):
+    """Finds document hits inside an already-scoped set of leaf nodes.
+
+    Implementation contract:
+
+    - Implementations belong in infrastructure and must not perform tree
+      routing, reference expansion, reranking, or provider-specific LLM calls.
+    - Scope every lookup to the supplied `leaves`; return an empty list when
+      `leaves` is empty or `limit <= 0`.
+    - Use deterministic scoring first. A concrete adapter may combine vector
+      distance, BM25-style lexical search, or database extensions, but it must
+      return stable `DocHit` ordering and fill `score`, plus `distance` and
+      `bm25` when those components are known.
+    - Keep `DocumentRepo` persistence-focused. Hybrid retrieval behavior lives
+      behind this port, not inside the document repository.
+    """
+
     async def find(
         self,
         query: str,
