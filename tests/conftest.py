@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from domain.entity import Job
-from infrastructure.repositories.db import Base
+from infrastructure.persistence.db import Base
 
 
 @pytest.fixture

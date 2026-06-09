@@ -13,7 +13,7 @@ from application.usecases.seed import Seed
 from application.usecases.split import Split
 from infrastructure.config import Settings, get_settings
 from infrastructure.embeddings import make_embedder
-from infrastructure.repositories.db import Db
+from infrastructure.persistence.db import Db
 from infrastructure.observability.logger import LoggingService
 from infrastructure.repositories.outbox import OutboxRepo
 from logging import getLogger

@@ -16,7 +16,7 @@ from infrastructure.repositories.documents import DocumentRepo
 from infrastructure.repositories.nodes import NodeRepo
 from infrastructure.repositories.outbox import OutboxRepo
 from infrastructure.repositories.references import ReferenceRepo
-from infrastructure.repositories.unit_of_work import SqlUnitOfWork
+from infrastructure.persistence.unit_of_work import SqlUnitOfWork
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def row(session_factory: sessionmaker[Session], model, id: UUID):
         return session.get(model, id)
 
 
-def test_sql_unit_of_work_satisfies_port_and_exposes_repositories(
+def test_sql_uow_satisfies_port_and_exposes_repositories(
     sessions,
     now,
 ) -> None:
@@ -197,7 +197,7 @@ async def test_clean_read_context_returns_loaded_detached_objects(sessions, now)
 
 
 @pytest.mark.asyncio
-async def test_reused_unit_of_work_opens_session_per_task_scope(sessions, now) -> None:
+async def test_reused_uow_opens_session_per_task_scope(sessions, now) -> None:
     shared = SqlUnitOfWork(sessions, now=lambda: now)
     entered = asyncio.Event()
     release = asyncio.Event()

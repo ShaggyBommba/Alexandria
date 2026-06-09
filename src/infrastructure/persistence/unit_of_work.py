@@ -4,8 +4,9 @@ from asyncio import current_task
 from collections.abc import Callable, Hashable
 from datetime import datetime
 from types import TracebackType
+from typing import cast
 
-from sqlalchemy.orm import Session, scoped_session
+from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
 from infrastructure.config import QueueSettings
 from infrastructure.repositories.documents import DocumentRepo
@@ -13,8 +14,7 @@ from infrastructure.repositories.nodes import NodeRepo
 from infrastructure.repositories.outbox import OutboxRepo
 from infrastructure.repositories.references import ReferenceRepo
 
-
-def _session_scope() -> Hashable | None:
+def session_scope() -> Hashable | None:
     """Return the current asyncio task when one exists, otherwise sync scope."""
     try:
         return current_task()
@@ -27,16 +27,18 @@ class SqlUnitOfWork:
 
     def __init__(
         self,
-        sessions: Callable[[], Session],
+        sessions: sessionmaker[Session],
         queue: QueueSettings | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
-        self._sessions = scoped_session(sessions, scopefunc=_session_scope)
+        self._sessions = scoped_session(sessions, scopefunc=session_scope)
         self.session = self._sessions
-        self.nodes = NodeRepo(self.session)
-        self.docs = DocumentRepo(self.session)
-        self.refs = ReferenceRepo(self.session)
-        self.outbox = OutboxRepo(self.session, queue=queue, now=now)
+
+        repo_session = cast(Session, self.session)
+        self.nodes = NodeRepo(repo_session)
+        self.docs = DocumentRepo(repo_session)
+        self.refs = ReferenceRepo(repo_session)
+        self.outbox = OutboxRepo(repo_session, queue=queue, now=now)
 
     async def __aenter__(self) -> SqlUnitOfWork:
         return self
