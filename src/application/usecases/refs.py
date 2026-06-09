@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from application.exceptions import MissingUnitOfWork
 from application.ports import UnitOfWork
+from domain.entity import Reference
 
 
 class Refs:
@@ -29,4 +31,41 @@ class Refs:
 
     async def run(self, node_id: UUID, limit: int = 10) -> None:
         """Replace outgoing references for one active leaf node."""
-        raise NotImplementedError("Refs.run is not implemented yet")
+        if self.uow is None:
+            raise MissingUnitOfWork("Refs requires a UnitOfWork")
+
+        uow = self.uow
+        source = await uow.nodes.get(node_id)
+        if source is None or source.status != "active" or source.kind != "leaf":
+            return
+
+        if limit <= 0:
+            await uow.refs.set(source.id, [])
+            await uow.commit()
+            return
+
+        candidates = await uow.nodes.near(
+            source.embedding,
+            limit=limit,
+            exclude={source.id},
+        )
+        refs: list[Reference] = []
+        for hit in candidates:
+            if (
+                hit.node.id == source.id
+                or hit.node.status != "active"
+                or hit.node.kind != "leaf"
+            ):
+                continue
+
+            refs.append(
+                Reference(
+                    from_node_id=source.id,
+                    to_node_id=hit.node.id,
+                    distance=hit.distance,
+                    rank=len(refs),
+                )
+            )
+
+        await uow.refs.set(source.id, refs)
+        await uow.commit()
