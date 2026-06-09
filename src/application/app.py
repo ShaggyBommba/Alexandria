@@ -15,6 +15,7 @@ from infrastructure.config import Settings, get_settings
 from infrastructure.embeddings import make_embedder
 from infrastructure.persistence.db import Db
 from infrastructure.observability.logger import LoggingService
+from infrastructure.repositories.nodes import NodeRepo
 from infrastructure.repositories.outbox import OutboxRepo
 from logging import getLogger
 
@@ -28,6 +29,7 @@ class App:
         self.settings = settings
         self.db = Db(settings.database)
         self.session = self.db.session()
+        self.nodes = NodeRepo(self.session)
         self.outbox = OutboxRepo(self.session, settings.queue)
         self.queue = self.outbox
         self.embedder = make_embedder(settings.embedding.provider, settings.embedding)
@@ -36,7 +38,7 @@ class App:
         # Each case is wired as a workflow boundary. Concrete repository,
         # search, LLM, and ranking adapters can be injected here as they land.
         self.seed_case = Seed()
-        self.route_case = Route()
+        self.route_case = Route(self.nodes)
         self.rerank_case = Rerank()
         self.refs_case = Refs()
         self.split_case = Split()

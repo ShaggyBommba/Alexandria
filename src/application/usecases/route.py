@@ -79,5 +79,6 @@ class Route:
                     branches.append(hit)
 
             branches.sort(key=hit_order)
+            branches = branches[:limit]
 
         return sorted(leaves, key=hit_order)[:limit]
