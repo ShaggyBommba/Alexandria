@@ -9,10 +9,13 @@ from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
 from application.ports import DocIn
-from infrastructure.exceptions import AgentError
+from application.ports import Summarizer as SummarizerPort
+from infrastructure.config import SummarizerProvider, SummarizerSettings
+from infrastructure.exceptions import AgentError, SummarizerConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -105,3 +108,23 @@ class LangSummarizer:
             return SummaryResult.model_validate(structured)
         except ValidationError as exc:
             raise AgentError(f"Summarizer agent returned invalid structured response: {exc}") from exc
+
+
+def make_summarizer(
+    provider: SummarizerProvider,
+    settings: SummarizerSettings,
+) -> SummarizerPort:
+    """Build the configured summarizer adapter."""
+    if provider is SummarizerProvider.OPENAI:
+        if settings.api_key is None:
+            raise SummarizerConfigError("summarizer provider openai requires an api_key")
+        return LangSummarizer(
+            client=ChatOpenAI(
+                api_key=settings.api_key,
+                base_url=settings.base_url,
+                model=settings.model,
+                timeout=settings.timeout_seconds,
+            ),
+        )
+
+    raise SummarizerConfigError(f"unsupported summarizer provider: {provider}")

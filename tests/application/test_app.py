@@ -32,6 +32,10 @@ class FakeEmbedder:
     pass
 
 
+class FakeSummarizer:
+    pass
+
+
 def test_app_wires_route_with_node_repository(monkeypatch) -> None:
     # Arrange
     import application.app as app_module
@@ -40,6 +44,12 @@ def test_app_wires_route_with_node_repository(monkeypatch) -> None:
     monkeypatch.setattr(app_module, "NodeRepo", FakeNodeRepo)
     monkeypatch.setattr(app_module, "OutboxRepo", FakeOutboxRepo)
     monkeypatch.setattr(app_module, "make_embedder", lambda provider, settings: FakeEmbedder())
+    fake_summarizer = FakeSummarizer()
+    monkeypatch.setattr(
+        app_module,
+        "make_summarizer",
+        lambda provider, settings: fake_summarizer,
+    )
 
     # Act
     settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=7))
@@ -50,5 +60,6 @@ def test_app_wires_route_with_node_repository(monkeypatch) -> None:
     assert app.nodes.session is app.session
     assert app.route_case.nodes is app.nodes
     assert app.ingest_case.route is app.route_case
+    assert app.ingest_case.summarizer is fake_summarizer
     assert app.ingest_case.max_leaf_docs == 7
     assert app.retrieve_case.route is app.route_case

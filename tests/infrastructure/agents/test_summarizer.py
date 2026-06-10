@@ -3,8 +3,9 @@ from __future__ import annotations
 import pytest
 
 from application.ports import DocIn, Summarizer
-from infrastructure.agents.summarizer import LangSummarizer
-from infrastructure.exceptions import AgentError
+from infrastructure.agents.summarizer import LangSummarizer, make_summarizer
+from infrastructure.config import SummarizerProvider, SummarizerSettings
+from infrastructure.exceptions import AgentError, SummarizerConfigError
 
 
 class FakeAgent:
@@ -77,3 +78,30 @@ async def test_summarize_rejects_empty_summary() -> None:
 
     with pytest.raises(AgentError, match="empty summary"):
         await summarizer.summarize(doc)
+
+
+def test_factory_rejects_missing_api_key() -> None:
+    settings = SummarizerSettings(api_key=None)
+
+    with pytest.raises(SummarizerConfigError, match="requires an api_key"):
+        make_summarizer(SummarizerProvider.OPENAI, settings)
+
+
+def test_factory_constructs_lang_summarizer_for_openai(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = SummarizerSettings(api_key="test-key")
+    captured: dict[str, object] = {}
+
+    class FakeOpenAIClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "infrastructure.agents.summarizer.ChatOpenAI",
+        FakeOpenAIClient,
+    )
+
+    summarizer = make_summarizer(SummarizerProvider.OPENAI, settings)
+
+    assert isinstance(summarizer, LangSummarizer)
+    assert captured["api_key"] == "test-key"
+    assert captured["model"] == "gpt-4o-mini"

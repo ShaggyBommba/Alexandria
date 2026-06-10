@@ -14,6 +14,19 @@ class AgentError(InfraError):
 
     code = "infra.agent.error"
 
+
+class SummarizerError(AgentError):
+    """Base class for expected summarizer adapter errors."""
+
+    code = "infra.summarizer.error"
+
+
+class SummarizerConfigError(SummarizerError):
+    """Raised when summarizer settings are incomplete or invalid."""
+
+    code = "infra.summarizer.config"
+    retryable = False
+
 class EmbedderError(InfraError):
     """Base class for expected embedding adapter errors."""
 
