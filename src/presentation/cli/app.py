@@ -7,6 +7,7 @@ import click
 
 from application.app import App, get_app
 from application.exceptions import AppError
+from application.ports import DocIn
 
 
 @contextmanager
@@ -30,6 +31,21 @@ def version(app: App) -> None:
     click.echo(app.version)
 
 
+@cli.command("ingest")
+@click.option("--name", required=True, help="Document name.")
+@click.option("--body", required=True, help="Document body.")
+@click.option("--source-key", default=None, help="Optional source idempotency key.")
+@click.pass_obj
+def ingest(app: App, name: str, body: str, source_key: str | None) -> None:
+    """Ingest one document through the application boundary."""
+    try:
+        id = asyncio.run(app.ingest(DocIn(name=name, body=body, source_key=source_key)))
+    except AppError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(str(id))
+
+
 @cli.command("refs")
 @click.argument("node_id")
 @click.pass_obj
@@ -41,13 +57,11 @@ def build_refs(app: App, node_id: str) -> None:
         raise click.ClickException(f"invalid node id: {node_id}") from exc
 
     try:
-        refs = asyncio.run(app.refs(id))
+        asyncio.run(app.refs(id))
     except AppError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    click.echo(f"built {len(refs)} refs for {id}")
-    for ref in refs:
-        click.echo(f"{ref.target_id} {ref.distance:.6f} {ref.metric} {ref.model}")
+    click.echo(f"built refs for {id}")
 
 
 def main() -> None:
