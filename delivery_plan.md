@@ -183,7 +183,7 @@ Delivery evidence:
 
 - `tests/integration/test_retrieve_flow.py` demonstrates local ingest plus retrieve.
 - Reference expansion coverage demonstrates a target leaf document returned through an expanded scope.
-- `notebooks/02_retrieve_smoke.ipynb` or a documented deterministic walkthrough shows query, hits, scores, and document ids.
+- `sandbox/02_retrieve_smoke.ipynb` or a documented deterministic walkthrough shows query, hits, scores, and document ids.
 
 Not in scope:
 
@@ -256,7 +256,7 @@ Delivery evidence:
 
 - `tests/integration/test_lint_split_flow.py` demonstrates one full leaf split into children.
 - Worker tests prove malformed payload and successful job handling.
-- `notebooks/03_lint_split_smoke.ipynb` or a documented deterministic walkthrough shows before/after durable state.
+- `sandbox/03_lint_split_smoke.ipynb` or a documented deterministic walkthrough shows before/after durable state.
 
 Not in scope:
 
@@ -322,7 +322,7 @@ Delivery evidence:
 - `tests/entrypoints/test_api.py` covers API behavior.
 - `tests/entrypoints/test_cli.py` covers CLI behavior.
 - `tests/entrypoints/test_mcp.py` covers MCP behavior when included.
-- `notebooks/04_entrypoints_smoke.ipynb` or a documented deterministic walkthrough demonstrates public ingest and retrieve.
+- `sandbox/04_entrypoints_smoke.ipynb` or a documented deterministic walkthrough demonstrates public ingest and retrieve.
 
 Not in scope:
 
@@ -392,7 +392,7 @@ Delivery evidence:
 
 - `tests/integration/test_relevance_flow.py` demonstrates scoring expectations on a local corpus.
 - Adapter tests use fake clients and no network.
-- `notebooks/05_relevance_eval.ipynb` or a documented deterministic walkthrough shows query set, scores, and rankings.
+- `sandbox/05_relevance_eval.ipynb` or a documented deterministic walkthrough shows query set, scores, and rankings.
 
 Not in scope:
 
@@ -457,7 +457,7 @@ task test
 Delivery evidence:
 
 - `tests/integration/test_end_to_end_flow.py` demonstrates the full local lifecycle.
-- `notebooks/06_end_to_end.ipynb` or a documented deterministic walkthrough shows the same lifecycle.
+- `sandbox/06_end_to_end.ipynb` or a documented deterministic walkthrough shows the same lifecycle.
 - Documentation lists any external-service setup required for provider-backed paths.
 
 Not in scope:
@@ -467,14 +467,14 @@ Not in scope:
 
 ## Notebook Convention
 
-Use a dedicated `notebooks/` directory for delivery walkthroughs; until Delivery 1 is mirrored into-repo, use:
+Use a dedicated `sandbox/` directory for delivery walkthroughs; until Delivery 1 is mirrored into-repo, use:
 
 - `/Users/jonasmeddeb/templates/alexandria/sandbox/01_ingest_smoke.ipynb` (current location)
-- `notebooks/02_retrieve_smoke.ipynb`
-- `notebooks/03_lint_split_smoke.ipynb`
-- `notebooks/04_entrypoints_smoke.ipynb`
-- `notebooks/05_relevance_eval.ipynb`
-- `notebooks/06_end_to_end.ipynb`
+- `sandbox/02_retrieve_smoke.ipynb`
+- `sandbox/03_lint_split_smoke.ipynb`
+- `sandbox/04_entrypoints_smoke.ipynb`
+- `sandbox/05_relevance_eval.ipynb`
+- `sandbox/06_end_to_end.ipynb`
 
 Notebook rules:
 
