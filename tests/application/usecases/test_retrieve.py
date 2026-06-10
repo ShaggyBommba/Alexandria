@@ -148,6 +148,34 @@ async def test_retrieve_returns_empty_for_non_positive_limit_without_calling_dep
     assert rerank.calls == []
 
 
+async def test_retrieve_returns_empty_when_route_finds_no_scope() -> None:
+    # Arrange
+    embedding = vector(0.7, 0.8)
+    embedder = FakeEmbedder(embedding)
+    route = FakeRoute([])
+    refs = FakeRefs([RefHit(ref=Reference(), node=node(2), distance=0.1)])
+    search = FakeSearch([hit(1, 0.9)])
+    rerank = FakeRerank([hit(2, 1.0)])
+    retrieve = Retrieve(
+        search=search,
+        refs=refs,
+        embedder=embedder,
+        route=route,
+        rerank=rerank,
+    )
+
+    # Act
+    result = await retrieve.run("query text", limit=2)
+
+    # Assert
+    assert result == []
+    assert embedder.calls == ["query text"]
+    assert route.calls == [(embedding, 2)]
+    assert refs.calls == []
+    assert search.calls == []
+    assert rerank.calls == []
+
+
 async def test_retrieve_embeds_routes_and_searches_scoped_leaf_set() -> None:
     # Arrange
     embedding = vector(0.7, 0.8)
@@ -204,6 +232,30 @@ async def test_retrieve_expands_scope_with_references_before_searching() -> None
     assert search.calls == [
         ("query text", embedding, {routed_leaf.id, referenced_leaf.id}, 3),
     ]
+
+
+async def test_retrieve_skips_rerank_when_search_returns_no_hits() -> None:
+    # Arrange
+    embedding = vector(0.5, 0.6)
+    leaf = node(1)
+    embedder = FakeEmbedder(embedding)
+    route = FakeRoute([NodeHit(leaf, 0.0)])
+    search = FakeSearch([])
+    rerank = FakeRerank([hit(2, 1.0)])
+    retrieve = Retrieve(
+        search=search,
+        embedder=embedder,
+        route=route,
+        rerank=rerank,
+    )
+
+    # Act
+    result = await retrieve.run("query text", limit=1)
+
+    # Assert
+    assert result == []
+    assert search.calls == [("query text", embedding, {leaf.id}, 1)]
+    assert rerank.calls == []
 
 
 async def test_retrieve_calls_rerank_when_configured() -> None:

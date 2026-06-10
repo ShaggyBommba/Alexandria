@@ -78,6 +78,19 @@ def repo(session: Session) -> ReferenceRepo:
     return ReferenceRepo(session)
 
 
+class FakeSession:
+    def __init__(self) -> None:
+        self.statement = None
+
+    def execute(self, statement):
+        self.statement = statement
+        raise AssertionError("execute should not be called")
+
+
+class FakeBind:
+    dialect = postgresql.dialect()
+
+
 class FakeResult:
     def __init__(self, rows: list[tuple[Reference, Node, float]]) -> None:
         self.rows = rows
@@ -86,10 +99,13 @@ class FakeResult:
         return self.rows
 
 
-class FakeSession:
+class FakePgSession:
     def __init__(self, rows: list[tuple[Reference, Node, float]]) -> None:
         self.rows = rows
         self.statement = None
+
+    def get_bind(self) -> FakeBind:
+        return FakeBind()
 
     def execute(self, statement):
         self.statement = statement
@@ -233,7 +249,7 @@ async def test_clear_and_rm_delete_references_and_ignore_missing_rows(
 
 
 @pytest.mark.asyncio
-async def test_near_returns_referenced_nodes_ranked_by_query_distance() -> None:
+async def test_near_uses_bounded_pgvector_query_for_postgres() -> None:
     target = node(3, embedding=vector(1.0, 0.0))
     ref = Reference(
         id=uid(10),
@@ -242,7 +258,7 @@ async def test_near_returns_referenced_nodes_ranked_by_query_distance() -> None:
         distance=0.12,
         rank=1,
     )
-    session = FakeSession([(ref, target, 0.04)])
+    session = FakePgSession([(ref, target, 0.04)])
     refs = ReferenceRepo(session)
 
     result = await refs.near({uid(2), uid(1)}, vector(1.0, 0.0), limit=3)
@@ -259,6 +275,7 @@ async def test_near_returns_referenced_nodes_ranked_by_query_distance() -> None:
     assert "nodes.kind = %(kind_1)s" in sql
     assert "nodes.status = %(status_1)s" in sql
     assert 'ORDER BY distance ASC, "references".rank ASC, "references".id ASC' in sql
+    assert "LIMIT %(param_1)s" in sql
     assert compiled.params["from_node_id_1"] == [uid(1), uid(2)]
     assert compiled.params["kind_1"] == "leaf"
     assert compiled.params["status_1"] == "active"
@@ -266,11 +283,75 @@ async def test_near_returns_referenced_nodes_ranked_by_query_distance() -> None:
 
 
 @pytest.mark.asyncio
+async def test_near_returns_scoped_active_leaves_ranked_deterministically(
+    ref_session,
+) -> None:
+    refs = repo(ref_session)
+    source = node(1)
+    other_source = node(2)
+    lower_rank = node(3, embedding=vector(1.0, 0.0))
+    first_id_tie = node(4, embedding=vector(1.0, 0.0))
+    later_id_tie = node(5, embedding=vector(1.0, 0.0))
+    farther = node(6, embedding=vector(0.0, 1.0))
+    branch = node(7, embedding=vector(1.0, 0.0), kind="branch")
+    retired = node(8, embedding=vector(1.0, 0.0), status="retired")
+    unrelated = node(9, embedding=vector(1.0, 0.0))
+    ref_session.add_all(
+        [
+            source,
+            other_source,
+            lower_rank,
+            first_id_tie,
+            later_id_tie,
+            farther,
+            branch,
+            retired,
+            unrelated,
+            reference(12, source, lower_rank, rank=1),
+            reference(10, source, first_id_tie, rank=2),
+            reference(11, source, later_id_tie, rank=2),
+            reference(13, source, farther, rank=0),
+            reference(14, source, branch, rank=0),
+            reference(15, source, retired, rank=0),
+            reference(16, other_source, unrelated, rank=0),
+        ]
+    )
+    ref_session.flush()
+
+    result = await refs.near({source.id}, vector(1.0, 0.0), limit=3)
+
+    assert [hit.node.id for hit in result] == [
+        lower_rank.id,
+        first_id_tie.id,
+        later_id_tie.id,
+    ]
+    assert [hit.ref.id for hit in result] == [uid(12), uid(10), uid(11)]
+    assert [hit.distance for hit in result] == [
+        pytest.approx(0.0),
+        pytest.approx(0.0),
+        pytest.approx(0.0),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_near_ignores_empty_source_sets() -> None:
-    session = FakeSession([])
+    session = FakeSession()
     refs = ReferenceRepo(session)
 
     result = await refs.near(set(), vector(1.0, 0.0), limit=3)
 
     assert result == []
+    assert session.statement is None
+
+
+@pytest.mark.asyncio
+async def test_near_ignores_non_positive_limits() -> None:
+    session = FakeSession()
+    refs = ReferenceRepo(session)
+
+    zero = await refs.near({uid(1)}, vector(1.0, 0.0), limit=0)
+    negative = await refs.near({uid(1)}, vector(1.0, 0.0), limit=-1)
+
+    assert zero == []
+    assert negative == []
     assert session.statement is None

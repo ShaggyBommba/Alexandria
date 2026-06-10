@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from application.ports import NodeHit
 from domain.entity import Document, Node
+from infrastructure.utils.vector import cosine_distance
 
 logging = getLogger(__name__)
 
@@ -67,20 +68,41 @@ class NodeRepo:
         parent: UUID | None = None,
         exclude: set[UUID] | None = None,
     ) -> list[NodeHit]:
+        if limit <= 0:
+            return []
+
         filters = [Node.status == "active"]
         if parent is not None:
             filters.append(Node.parent_id == parent)
         if exclude:
             filters.append(Node.id.not_in(exclude))
 
-        distance = Node.embedding.cosine_distance(embedding).label("distance")
-        rows = self._session.execute(
-            select(Node, distance)
-            .where(*filters)
-            .order_by(distance.asc(), Node.id.asc())
-            .limit(limit)
+        if self.vector_sql_enabled():
+            distance = Node.embedding.cosine_distance(embedding).label("distance")
+            rows = self._session.execute(
+                select(Node, distance)
+                .where(*filters)
+                .order_by(distance.asc(), Node.id.asc())
+                .limit(limit)
+            ).all()
+            return [
+                NodeHit(node=node, distance=float(distance))
+                for node, distance in rows
+            ]
+
+        nodes = self._session.scalars(
+            select(Node).where(*filters).order_by(Node.id.asc())
         ).all()
-        return [NodeHit(node=node, distance=float(distance)) for node, distance in rows]
+        hits = [
+            NodeHit(node=node, distance=cosine_distance(embedding, list(node.embedding)))
+            for node in nodes
+        ]
+        hits.sort(key=lambda hit: (hit.distance, str(hit.node.id)))
+        return hits[:limit]
+
+    def vector_sql_enabled(self) -> bool:
+        """Return whether this session can execute pgvector distance SQL."""
+        return self._session.get_bind().dialect.name == "postgresql"
 
     async def count(self, id: UUID) -> int:
         count = self._session.scalar(
