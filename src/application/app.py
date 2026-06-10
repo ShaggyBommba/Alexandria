@@ -1,8 +1,8 @@
 from functools import lru_cache
 from uuid import UUID
 
+from application.ports import DocHit, DocIn, NodeHit, Summarizer
 from domain.entity import Node
-from application.ports import DocHit, DocIn, NodeHit
 from application.usecases.ingest import Ingest
 from application.usecases.lint import Lint
 from application.usecases.refs import Refs
@@ -14,12 +14,28 @@ from application.usecases.split import Split
 from infrastructure.config import Settings, get_settings
 from infrastructure.embeddings import make_embedder
 from infrastructure.persistence.db import Db
+from infrastructure.persistence.unit_of_work import SqlUnitOfWork
 from infrastructure.observability.logger import LoggingService
 from infrastructure.repositories.nodes import NodeRepo
-from infrastructure.repositories.outbox import OutboxRepo
+from infrastructure.repositories.references import ReferenceRepo
+from infrastructure.search import SqlSearch
 from logging import getLogger
 
+
+class _PlaceholderSummarizer:
+    """Local fallback summarizer while summary provider configuration is pending."""
+
+    async def summarize(self, doc: DocIn) -> str:
+        return doc.body
+
+
+def make_summarizer(_settings: Settings) -> Summarizer:
+    """Return a configured summarizer when available, otherwise use a placeholder."""
+
+    return _PlaceholderSummarizer()
+
 logging = getLogger(__name__)
+
 
 class App:
     """Application boundary for alexandria workflows."""
@@ -28,32 +44,40 @@ class App:
         """Keep app settings and injected use cases."""
         self.settings = settings
         self.db = Db(settings.database)
+        self.sessions = self.db.sessions()
         self.session = self.db.session()
+
         self.nodes = NodeRepo(self.session)
-        self.outbox = OutboxRepo(self.session, settings.queue)
-        self.queue = self.outbox
+        self.refs_repo = ReferenceRepo(self.session)
+        self.search = SqlSearch(self.session)
+        self.uow = SqlUnitOfWork(self.sessions, settings.queue)
+
         self.embedder = make_embedder(settings.embedding.provider, settings.embedding)
-        self.search = None
+        self.summarizer = make_summarizer(settings)
+        self.queue = self.uow.outbox
+        self.outbox = self.uow.outbox
 
         # Each case is wired as a workflow boundary. Concrete repository,
         # search, LLM, and ranking adapters can be injected here as they land.
-        self.seed_case = Seed()
+        self.seed_case = Seed(uow=self.uow)
         self.route_case = Route(self.nodes)
         self.rerank_case = Rerank()
-        self.refs_case = Refs()
-        self.split_case = Split()
-        self.lint_case = Lint(split=self.split_case)
+        self.refs_case = Refs(uow=self.uow)
+        self.split_case = Split(uow=self.uow)
+        self.lint_case = Lint(uow=self.uow, split=self.split_case)
         self.ingest_case = Ingest(
+            uow=self.uow,
             embedder=self.embedder,
+            summarizer=self.summarizer,
             seed=self.seed_case,
             route=self.route_case,
             max_leaf_docs=settings.ingest.max_leaf_docs,
         )
         self.retrieve_case = Retrieve(
             search=self.search,
+            refs=self.refs_repo,
             embedder=self.embedder,
             route=self.route_case,
-            refs=None,
             rerank=self.rerank_case,
         )
 
