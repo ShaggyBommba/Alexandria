@@ -80,8 +80,12 @@ async def test_summarize_rejects_empty_summary() -> None:
         await summarizer.summarize(doc)
 
 
-def test_factory_rejects_missing_api_key() -> None:
-    settings = SummarizerSettings(api_key=None)
+@pytest.mark.parametrize(
+    "value",
+    [None, "", "   "],
+)
+def test_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
+    settings = SummarizerSettings(api_key=value)
 
     with pytest.raises(SummarizerConfigError, match="requires an api_key"):
         make_summarizer(SummarizerProvider.OPENAI, settings)

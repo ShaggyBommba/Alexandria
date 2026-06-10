@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import cached_property
 from typing import Any
 
@@ -110,17 +110,31 @@ class LangSummarizer:
             raise AgentError(f"Summarizer agent returned invalid structured response: {exc}") from exc
 
 
+class LazySummarizer:
+    """Defer summarizer construction until it is first used."""
+
+    def __init__(self, factory: Callable[[], SummarizerPort]) -> None:
+        self._factory = factory
+        self._instance: SummarizerPort | None = None
+
+    async def summarize(self, doc: DocIn) -> str:
+        if self._instance is None:
+            self._instance = self._factory()
+        return await self._instance.summarize(doc)
+
+
 def make_summarizer(
     provider: SummarizerProvider,
     settings: SummarizerSettings,
 ) -> SummarizerPort:
     """Build the configured summarizer adapter."""
     if provider is SummarizerProvider.OPENAI:
-        if settings.api_key is None:
+        api_key = (settings.api_key or "").strip()
+        if not api_key:
             raise SummarizerConfigError("summarizer provider openai requires an api_key")
         return LangSummarizer(
             client=ChatOpenAI(
-                api_key=settings.api_key,
+                api_key=api_key,
                 base_url=settings.base_url,
                 model=settings.model,
                 timeout=settings.timeout_seconds,
