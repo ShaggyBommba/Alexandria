@@ -7,7 +7,14 @@ from application.exceptions import (
     IngestLeafError,
     MissingUnitOfWork,
 )
-from application.ports import DocIn, Embedder, NodeHit, Summarizer, UnitOfWork
+from application.ports import (
+    DocIn,
+    Embedder,
+    FullnessPolicy,
+    NodeHit,
+    Summarizer,
+    UnitOfWork,
+)
 from application.usecases.route import Route
 from application.usecases.seed import Seed
 from domain.entity import Document, Job, Node
@@ -44,7 +51,7 @@ class Ingest:
     - Persist a `Document` with the original name, body, source key, generated
       summary, chosen leaf id, and embedding. Update the chosen leaf's
       `doc_count` consistently with stored documents.
-    - Append an idempotent `split.check` job only when the explicit leaf
+    - Append an idempotent `split.check` job only when the injected leaf
       fullness policy says the leaf is full. The node id should be the outbox
       key so duplicate publications collapse.
     - Commit the document write, count update, and outbox append in one unit of
@@ -58,7 +65,7 @@ class Ingest:
         summarizer: Summarizer | None = None,
         seed: Seed | None = None,
         route: Route | None = None,
-        max_leaf_docs: int | None = None,
+        fullness: FullnessPolicy | None = None,
         route_limit: int = 10,
     ) -> None:
         self.uow = uow
@@ -66,7 +73,7 @@ class Ingest:
         self.summarizer = summarizer
         self.seed = seed
         self.route = route
-        self.max_leaf_docs = max_leaf_docs
+        self.fullness = fullness
         self.route_limit = route_limit
 
     async def run(self, doc: DocIn) -> UUID:
@@ -81,6 +88,8 @@ class Ingest:
             raise IngestDependencyError("Ingest requires a Seed use case")
         if self.route is None:
             raise IngestDependencyError("Ingest requires a Route use case")
+        if self.fullness is None:
+            raise IngestDependencyError("Ingest requires a FullnessPolicy")
 
         summary = await self.summarizer.summarize(doc)
         embedding = await self.embedder.embed(document_text(doc))
@@ -105,7 +114,7 @@ class Ingest:
         leaf.doc_count = await uow.nodes.count(leaf.id)
         await uow.nodes.save(leaf)
 
-        if self.leaf_is_full(leaf.doc_count):
+        if self.fullness.full(leaf.doc_count):
             await uow.outbox.append(
                 Job(
                     kind=JobKind.SPLIT_CHECK,
@@ -128,7 +137,3 @@ class Ingest:
             return None
 
         return sorted(leaves, key=leaf_order)[0].node
-
-    def leaf_is_full(self, doc_count: int) -> bool:
-        """Return whether the configured fullness policy marks a leaf full."""
-        return self.max_leaf_docs is not None and doc_count >= self.max_leaf_docs

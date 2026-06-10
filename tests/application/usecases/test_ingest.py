@@ -95,6 +95,16 @@ class FakeRoute:
         return self.hits
 
 
+class FakeFullness:
+    def __init__(self, threshold: int) -> None:
+        self.threshold = threshold
+        self.calls: list[int] = []
+
+    def full(self, doc_count: int) -> bool:
+        self.calls.append(doc_count)
+        return doc_count >= self.threshold
+
+
 class FakeDocs:
     def __init__(self, docs: list[Document], events: list[str]) -> None:
         self.docs = docs
@@ -159,7 +169,7 @@ def make_case(
     summarizer: FakeSummarizer | None = None,
     seed: FakeSeed | None = None,
     route: FakeRoute | None = None,
-    max_leaf_docs: int | None = None,
+    fullness: FakeFullness | None = None,
     route_limit: int = 10,
 ) -> Ingest:
     event_log = events if events is not None else []
@@ -179,7 +189,7 @@ def make_case(
         route=route
         if route is not None
         else FakeRoute([NodeHit(root, 0.0)], event_log),
-        max_leaf_docs=max_leaf_docs,
+        fullness=fullness if fullness is not None else FakeFullness(100),
         route_limit=route_limit,
     )
 
@@ -204,6 +214,7 @@ async def test_ingest_requires_unit_of_work() -> None:
         ("summarizer", "Summarizer"),
         ("seed", "Seed"),
         ("route", "Route"),
+        ("fullness", "FullnessPolicy"),
     ],
 )
 async def test_ingest_requires_all_external_dependencies(
@@ -249,6 +260,7 @@ async def test_ingest_persists_document_on_nearest_active_leaf() -> None:
         summarizer=summarizer,
         seed=seed,
         route=route,
+        fullness=FakeFullness(100),
         route_limit=4,
     )
 
@@ -303,6 +315,7 @@ async def test_ingest_fails_explicitly_when_route_returns_no_active_leaf() -> No
             ],
             events,
         ),
+        fullness=FakeFullness(100),
     )
 
     # Act / Assert
@@ -331,7 +344,7 @@ async def test_ingest_appends_split_check_when_explicit_policy_says_leaf_is_full
         summarizer=FakeSummarizer("Summary.", events),
         seed=FakeSeed(leaf, events),
         route=FakeRoute([NodeHit(leaf, 0.0)], events),
-        max_leaf_docs=2,
+        fullness=FakeFullness(2),
     )
 
     # Act
@@ -370,7 +383,7 @@ async def test_ingest_does_not_append_split_check_before_policy_is_full() -> Non
         summarizer=FakeSummarizer("Summary.", events),
         seed=FakeSeed(leaf, events),
         route=FakeRoute([NodeHit(leaf, 0.0)], events),
-        max_leaf_docs=2,
+        fullness=FakeFullness(2),
     )
 
     # Act

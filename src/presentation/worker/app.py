@@ -4,12 +4,28 @@ import asyncio
 import logging
 from uuid import UUID
 
+from pydantic import BaseModel, ValidationError
+
 from application.app import App, get_app
 from domain.entity import Job
 from domain.values import JobKind, JobStatus
 from infrastructure.repositories.outbox import OutboxRepo
 
 logger = logging.getLogger(__name__)
+
+
+class SplitCheckPayload(BaseModel):
+    """Typed worker payload for split-check jobs."""
+
+    node_id: UUID
+
+
+class WorkerPayloadError(ValueError):
+    """Raised when a queued job payload cannot be handled."""
+
+
+def kind_value(kind: JobKind | str) -> str:
+    return kind.value if isinstance(kind, JobKind) else str(kind)
 
 
 class Worker:
@@ -58,6 +74,16 @@ class Worker:
                     try:
                         await self.handle(job)
                         await repo.mark(job.id, JobStatus.DONE)
+                    except WorkerPayloadError as error:
+                        logger.warning(
+                            "Job %s has malformed payload: %s", job.id, error
+                        )
+                        await repo.mark(
+                            job.id,
+                            JobStatus.FAILED,
+                            str(error),
+                            retry=False,
+                        )
                     except Exception as error:
                         logger.warning("Job %s failed processing: %s", job.id, error)
                         await repo.mark(job.id, JobStatus.FAILED, str(error))
@@ -70,12 +96,18 @@ class Worker:
                 raise
 
     async def handle(self, job: Job) -> None:
-        if job.kind == self.kind:
-            node_id = UUID(str(job.payload["node_id"]))
-            await self.app.lint(node_id)
-            return
+        if (
+            self.kind != JobKind.SPLIT_CHECK
+            or kind_value(job.kind) != JobKind.SPLIT_CHECK.value
+        ):
+            raise ValueError(f"No handler configured for kind: {self.kind.value}")
 
-        raise ValueError(f"No handler configured for kind: {self.kind.value}")
+        try:
+            payload = SplitCheckPayload.model_validate(job.payload)
+        except ValidationError as exc:
+            raise WorkerPayloadError("split.check payload requires node_id UUID") from exc
+
+        await self.app.lint(payload.node_id)
 
 
 def main() -> None:

@@ -64,6 +64,11 @@ class SplitPlan:
 
 
 @runtime_checkable
+class FullnessPolicy(Protocol):
+    def full(self, doc_count: int) -> bool: ...
+
+
+@runtime_checkable
 class Embedder(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
@@ -164,7 +169,11 @@ class OutboxRepo(Protocol):
     async def claim(self, kind: JobKind, limit: int | None = None) -> list[Job]: ...
     async def due(self, kind: JobKind, limit: int | None = None) -> list[Job]: ...
     async def mark(
-        self, id: UUID, status: JobStatus, error: str | None = None
+        self,
+        id: UUID,
+        status: JobStatus,
+        error: str | None = None,
+        retry: bool = True,
     ) -> None: ...
 
 
