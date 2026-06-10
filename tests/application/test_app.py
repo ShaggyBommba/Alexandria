@@ -105,8 +105,8 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(monkeypatc
     assert isinstance(app.nodes, FakeNodeRepo)
     assert app.nodes.session is fake_db.read_session
     assert app.nodes.session is app.session
-    assert isinstance(app.refs, FakeReferenceRepo)
-    assert app.refs.session is fake_db.read_session
+    assert isinstance(app.refs_repo, FakeReferenceRepo)
+    assert app.refs_repo.session is fake_db.read_session
     assert isinstance(app.search, FakeSqlSearch)
     assert app.search.session is fake_db.read_session
     assert isinstance(app.uow, FakeSqlUnitOfWork)
@@ -120,7 +120,7 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(monkeypatc
     assert app.ingest_case.seed is app.seed_case
     assert app.ingest_case.route is app.route_case
     assert app.retrieve_case.route is app.route_case
-    assert app.retrieve_case.refs is app.refs
+    assert app.retrieve_case.refs is app.refs_repo
     assert app.retrieve_case.search is app.search
     assert app.refs_case.uow is app.uow
     assert app.lint_case.uow is app.uow

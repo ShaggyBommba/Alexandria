@@ -48,7 +48,7 @@ class App:
         self.session = self.db.session()
 
         self.nodes = NodeRepo(self.session)
-        self.refs = ReferenceRepo(self.session)
+        self.refs_repo = ReferenceRepo(self.session)
         self.search = SqlSearch(self.session)
         self.uow = SqlUnitOfWork(self.sessions, settings.queue)
 
@@ -75,7 +75,7 @@ class App:
         )
         self.retrieve_case = Retrieve(
             search=self.search,
-            refs=self.refs,
+            refs=self.refs_repo,
             embedder=self.embedder,
             route=self.route_case,
             rerank=self.rerank_case,
