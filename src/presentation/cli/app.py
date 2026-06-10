@@ -1,13 +1,20 @@
 import asyncio
 from contextlib import contextmanager
+import json
 from typing import Generator
 from uuid import UUID
 
 import click
+from pydantic import ValidationError
 
 from application.app import App, get_app
 from application.exceptions import AppError
-from application.ports import DocIn
+from presentation.contracts import (
+    IngestRequest,
+    RetrieveRequest,
+    RetrieveResponse,
+    validation_message,
+)
 
 
 @contextmanager
@@ -39,11 +46,32 @@ def version(app: App) -> None:
 def ingest(app: App, name: str, body: str, source_key: str | None) -> None:
     """Ingest one document through the application boundary."""
     try:
-        id = asyncio.run(app.ingest(DocIn(name=name, body=body, source_key=source_key)))
+        payload = IngestRequest(name=name, body=body, source_key=source_key)
+        id = asyncio.run(app.ingest(payload.doc()))
+    except ValidationError as exc:
+        raise click.ClickException(validation_message(exc)) from exc
     except AppError as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(str(id))
+
+
+@cli.command("retrieve")
+@click.argument("query")
+@click.option("--limit", default=10, type=int, show_default=True, help="Maximum hits.")
+@click.pass_obj
+def retrieve(app: App, query: str, limit: int) -> None:
+    """Retrieve documents through the application boundary."""
+    try:
+        payload = RetrieveRequest(query=query, limit=limit)
+        hits = asyncio.run(app.retrieve(payload.query, limit=payload.limit))
+    except ValidationError as exc:
+        raise click.ClickException(validation_message(exc)) from exc
+    except AppError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    response = RetrieveResponse.from_hits(hits).model_dump(mode="json")
+    click.echo(json.dumps(response, sort_keys=True))
 
 
 @cli.command("refs")
