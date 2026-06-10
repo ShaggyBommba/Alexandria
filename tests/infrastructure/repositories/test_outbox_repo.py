@@ -193,7 +193,9 @@ async def test_claim_claims_split_check_rows_as_domain_jobs(db_session, now) -> 
 
 
 @pytest.mark.asyncio
-async def test_mark_done_marks_job_complete_and_ignores_missing_rows(db_session, now) -> None:
+async def test_mark_done_marks_job_complete_and_ignores_missing_rows(
+    db_session, now
+) -> None:
     outbox = repo(db_session, now)
     id = await outbox.append(Job(kind=JobKind.EMAIL_SEND, payload={"n": 1}))
     await outbox.claim(JobKind.EMAIL_SEND)
@@ -209,7 +211,9 @@ async def test_mark_done_marks_job_complete_and_ignores_missing_rows(db_session,
 
 
 @pytest.mark.asyncio
-async def test_mark_failed_requeues_until_attempts_are_exhausted(db_session, now) -> None:
+async def test_mark_failed_requeues_until_attempts_are_exhausted(
+    db_session, now
+) -> None:
     outbox = repo(db_session, now, max_attempts=2)
     retryable = await outbox.append(
         Job(kind=JobKind.EMAIL_SEND, payload={"n": 1}, max_attempts=2),

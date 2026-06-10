@@ -43,7 +43,10 @@ class OutboxRepo:
                 select(Job).where(Job.key == job.key),
             )
             if existing_job is not None:
-                if existing_job.status in {JobStatus.PENDING.value, JobStatus.RUNNING.value}:
+                if existing_job.status in {
+                    JobStatus.PENDING.value,
+                    JobStatus.RUNNING.value,
+                }:
                     return existing_job.id
 
                 existing_job.kind = job.kind

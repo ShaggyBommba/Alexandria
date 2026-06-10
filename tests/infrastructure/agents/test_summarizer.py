@@ -35,7 +35,9 @@ def test_lang_summarizer_satisfies_port() -> None:
 
 @pytest.mark.asyncio
 async def test_summarize_sends_document_prompt_and_returns_summary() -> None:
-    agent = FakeAgent({"structured_response": {"summary": "  Uses beam search for routing.  "}})
+    agent = FakeAgent(
+        {"structured_response": {"summary": "  Uses beam search for routing.  "}}
+    )
     summarizer = adapter(agent)
     doc = DocIn(
         name="Routing memo",
@@ -91,7 +93,9 @@ def test_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
         make_summarizer(SummarizerProvider.OPENAI, settings)
 
 
-def test_factory_constructs_lang_summarizer_for_openai(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_constructs_lang_summarizer_for_openai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = SummarizerSettings(api_key="test-key")
     captured: dict[str, object] = {}
 

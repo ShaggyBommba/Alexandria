@@ -101,7 +101,9 @@ async def test_find_scopes_documents_to_supplied_leaves(search_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_find_populates_vector_scores_and_orders_best_first(search_session) -> None:
+async def test_find_populates_vector_scores_and_orders_best_first(
+    search_session,
+) -> None:
     docs = search(search_session)
     leaf = node(1)
     exact = doc(2, leaf, embedding=vector(1.0, 0.0))
@@ -121,7 +123,9 @@ async def test_find_populates_vector_scores_and_orders_best_first(search_session
 
 
 @pytest.mark.asyncio
-async def test_find_uses_document_id_tie_breaker_and_applies_limit(search_session) -> None:
+async def test_find_uses_document_id_tie_breaker_and_applies_limit(
+    search_session,
+) -> None:
     docs = search(search_session)
     leaf = node(1)
     later_tie = doc(5, leaf, embedding=vector(1.0, 0.0))

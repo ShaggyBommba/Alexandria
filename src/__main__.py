@@ -7,12 +7,7 @@ from presentation.cli.app import main as cli
 from presentation.mcp.app import main as mcp
 from presentation.worker.app import main as worker
 
-SERVICES = {
-    "api": api,
-    "cli": cli,
-    "mcp": mcp,
-    "worker": worker
-}
+SERVICES = {"api": api, "cli": cli, "mcp": mcp, "worker": worker}
 
 
 @click.command()

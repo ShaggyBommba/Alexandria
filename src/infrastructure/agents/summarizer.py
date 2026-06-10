@@ -62,14 +62,16 @@ class LangSummarizer:
 
     async def summarize(self, doc: DocIn) -> str:
         """Summarize one document through the LangChain agent."""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
-            (
-                "human",
-                USER_PROMPT
-                + "\n\nName:\n{name}\n\nSource key:\n{source_key}\n\nBody:\n{body}",
-            ),
-        ])
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", SYSTEM_PROMPT),
+                (
+                    "human",
+                    USER_PROMPT
+                    + "\n\nName:\n{name}\n\nSource key:\n{source_key}\n\nBody:\n{body}",
+                ),
+            ]
+        )
         messages = prompt.format_messages(
             name=doc.name,
             source_key=doc.source_key or "",
@@ -88,7 +90,9 @@ class LangSummarizer:
         if not summary:
             raise AgentError("Summarizer agent returned an empty summary")
 
-        logger.debug("Agent returned summary result: %s", result.model_dump_json(indent=2))
+        logger.debug(
+            "Agent returned summary result: %s", result.model_dump_json(indent=2)
+        )
         return summary
 
     @staticmethod
@@ -107,7 +111,9 @@ class LangSummarizer:
         try:
             return SummaryResult.model_validate(structured)
         except ValidationError as exc:
-            raise AgentError(f"Summarizer agent returned invalid structured response: {exc}") from exc
+            raise AgentError(
+                f"Summarizer agent returned invalid structured response: {exc}"
+            ) from exc
 
 
 class LazySummarizer:
@@ -131,7 +137,9 @@ def make_summarizer(
     if provider is SummarizerProvider.OPENAI:
         api_key = (settings.api_key or "").strip()
         if not api_key:
-            raise SummarizerConfigError("summarizer provider openai requires an api_key")
+            raise SummarizerConfigError(
+                "summarizer provider openai requires an api_key"
+            )
         return LangSummarizer(
             client=ChatOpenAI(
                 api_key=api_key,

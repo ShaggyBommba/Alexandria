@@ -11,7 +11,9 @@ class FakeDb:
         self.settings = settings
         self.read_session = object()
         self.unit_of_work_session = object()
-        self.unit_of_work_session_factory = FakeSessionFactory(self.unit_of_work_session)
+        self.unit_of_work_session_factory = FakeSessionFactory(
+            self.unit_of_work_session
+        )
         self.created = False
         self.sessions_called = False
         self.session_called = False
@@ -104,8 +106,9 @@ class FakeSummarizerWrapper:
         self.target = target
 
 
-
-def test_app_wires_read_and_write_dependencies_with_a_session_factory(monkeypatch) -> None:
+def test_app_wires_read_and_write_dependencies_with_a_session_factory(
+    monkeypatch,
+) -> None:
     # Arrange
     import application.app as app_module
 
@@ -118,7 +121,9 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(monkeypatc
     monkeypatch.setattr(app_module, "ReferenceRepo", FakeReferenceRepo)
     monkeypatch.setattr(app_module, "SqlSearch", FakeSqlSearch)
     monkeypatch.setattr(app_module, "SqlUnitOfWork", FakeSqlUnitOfWork)
-    monkeypatch.setattr(app_module, "make_embedder", lambda provider, settings: FakeEmbedder())
+    monkeypatch.setattr(
+        app_module, "make_embedder", lambda provider, settings: FakeEmbedder()
+    )
 
     def make_summarizer_factory(_provider, _settings):
         factory_calls.append("called")
@@ -180,8 +185,12 @@ async def test_app_constructs_summarizer_on_first_use(monkeypatch) -> None:
     monkeypatch.setattr(app_module, "ReferenceRepo", FakeReferenceRepo)
     monkeypatch.setattr(app_module, "SqlSearch", FakeSqlSearch)
     monkeypatch.setattr(app_module, "SqlUnitOfWork", FakeSqlUnitOfWork)
-    monkeypatch.setattr(app_module, "make_embedder", lambda provider, settings: FakeEmbedder())
-    monkeypatch.setattr(app_module, "make_summarizer", lambda _provider, _settings: deferred)
+    monkeypatch.setattr(
+        app_module, "make_embedder", lambda provider, settings: FakeEmbedder()
+    )
+    monkeypatch.setattr(
+        app_module, "make_summarizer", lambda _provider, _settings: deferred
+    )
 
     settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=7))
     app = App(settings)

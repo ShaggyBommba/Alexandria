@@ -14,6 +14,7 @@ from infrastructure.config import get_settings
 
 logger = getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(api: FastAPI) -> AsyncGenerator[None, None]:
     """Handles initialization and cleanup logic for the API lifecycle."""

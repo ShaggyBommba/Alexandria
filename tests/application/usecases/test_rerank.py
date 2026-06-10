@@ -71,7 +71,9 @@ async def test_rerank_with_ranker_delegates_and_returns_ranker_result() -> None:
             self.result = result
             self.calls: list[tuple[str, list[DocHit], int]] = []
 
-        async def rank(self, query: str, hits: list[DocHit], limit: int) -> list[DocHit]:
+        async def rank(
+            self, query: str, hits: list[DocHit], limit: int
+        ) -> list[DocHit]:
             self.calls.append((query, hits, limit))
             return self.result
 

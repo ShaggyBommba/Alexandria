@@ -167,14 +167,18 @@ def make_case(
     embedding = [0.5, 0.25]
     return Ingest(
         uow=uow if uow is not None else FakeUow(event_log),
-        embedder=embedder if embedder is not None else FakeEmbedder(embedding, event_log),
+        embedder=embedder
+        if embedder is not None
+        else FakeEmbedder(embedding, event_log),
         summarizer=(
             summarizer
             if summarizer is not None
             else FakeSummarizer("Concise summary.", event_log)
         ),
         seed=seed if seed is not None else FakeSeed(root, event_log),
-        route=route if route is not None else FakeRoute([NodeHit(root, 0.0)], event_log),
+        route=route
+        if route is not None
+        else FakeRoute([NodeHit(root, 0.0)], event_log),
         max_leaf_docs=max_leaf_docs,
         route_limit=route_limit,
     )
@@ -313,7 +317,9 @@ async def test_ingest_fails_explicitly_when_route_returns_no_active_leaf() -> No
 
 
 @pytest.mark.asyncio
-async def test_ingest_appends_split_check_when_explicit_policy_says_leaf_is_full() -> None:
+async def test_ingest_appends_split_check_when_explicit_policy_says_leaf_is_full() -> (
+    None
+):
     # Arrange
     events: list[str] = []
     leaf = node(1)

@@ -23,7 +23,9 @@ class Rerank:
     def __init__(self, ranker: Ranker | None = None) -> None:
         self.ranker = ranker
 
-    async def run(self, query: str, hits: list[DocHit], limit: int = 10) -> list[DocHit]:
+    async def run(
+        self, query: str, hits: list[DocHit], limit: int = 10
+    ) -> list[DocHit]:
         """Return ranked document hits using the adapter or deterministic scores."""
         if limit <= 0:
             return []

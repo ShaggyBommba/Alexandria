@@ -158,7 +158,9 @@ async def test_embedder_maps_retryable_sdk_errors_to_client_errors() -> None:
     # Arrange
     request = httpx.Request("POST", "http://localhost:1234/v1/embeddings")
     response = httpx.Response(429, request=request, text="rate limited")
-    embeddings = FakeEmbeddings(error=RateLimitError("rate limited", response=response, body=None))
+    embeddings = FakeEmbeddings(
+        error=RateLimitError("rate limited", response=response, body=None)
+    )
     embedder = OpenAIEmbedder(EmbeddingSettings(), FakeClient(embeddings))
 
     # Act / Assert
@@ -170,7 +172,9 @@ async def test_embedder_maps_retryable_sdk_errors_to_client_errors() -> None:
 async def test_embedder_maps_sdk_connection_errors_to_client_errors() -> None:
     # Arrange
     request = httpx.Request("POST", "http://localhost:1234/v1/embeddings")
-    embeddings = FakeEmbeddings(error=APIConnectionError(message="connection failed", request=request))
+    embeddings = FakeEmbeddings(
+        error=APIConnectionError(message="connection failed", request=request)
+    )
     embedder = OpenAIEmbedder(EmbeddingSettings(), FakeClient(embeddings))
 
     # Act / Assert

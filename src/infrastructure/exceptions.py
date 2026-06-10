@@ -9,6 +9,7 @@ class InfraError(BaseError):
     code = "infra.error"
     retryable = True
 
+
 class AgentError(InfraError):
     """Base class for expected agent adapter errors."""
 
@@ -26,6 +27,7 @@ class SummarizerConfigError(SummarizerError):
 
     code = "infra.summarizer.config"
     retryable = False
+
 
 class EmbedderError(InfraError):
     """Base class for expected embedding adapter errors."""

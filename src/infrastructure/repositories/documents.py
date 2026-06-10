@@ -34,9 +34,7 @@ class DocumentRepo:
         if not ids:
             return
 
-        docs = self._session.scalars(
-            select(Document).where(Document.id.in_(ids))
-        ).all()
+        docs = self._session.scalars(select(Document).where(Document.id.in_(ids))).all()
         for doc in docs:
             doc.leaf_id = leaf
 

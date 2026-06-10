@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Application ports for swappable dependencies."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -80,7 +80,9 @@ class Splitter(Protocol):
 
 @runtime_checkable
 class Ranker(Protocol):
-    async def rank(self, query: str, hits: list[DocHit], limit: int) -> list[DocHit]: ...
+    async def rank(
+        self, query: str, hits: list[DocHit], limit: int
+    ) -> list[DocHit]: ...
 
 
 @runtime_checkable
@@ -161,7 +163,9 @@ class OutboxRepo(Protocol):
     async def append(self, job: Job) -> UUID: ...
     async def claim(self, kind: JobKind, limit: int | None = None) -> list[Job]: ...
     async def due(self, kind: JobKind, limit: int | None = None) -> list[Job]: ...
-    async def mark(self, id: UUID, status: JobStatus, error: str | None = None) -> None: ...
+    async def mark(
+        self, id: UUID, status: JobStatus, error: str | None = None
+    ) -> None: ...
 
 
 @runtime_checkable

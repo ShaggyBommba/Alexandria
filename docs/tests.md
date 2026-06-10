@@ -54,6 +54,14 @@ Use:
 uv run pytest
 ```
 
+For evaluation, always run:
+
+```bash
+task test
+```
+
+`task test` must execute both validation checks and pytest.
+
 Useful focused commands:
 
 ```bash

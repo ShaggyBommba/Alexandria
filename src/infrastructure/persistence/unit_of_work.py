@@ -21,6 +21,7 @@ from infrastructure.repositories.nodes import NodeRepo
 from infrastructure.repositories.outbox import OutboxRepo
 from infrastructure.repositories.references import ReferenceRepo
 
+
 def session_scope() -> Hashable | None:
     """Return the current asyncio task when one exists, otherwise sync scope."""
     try:

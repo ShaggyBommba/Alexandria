@@ -181,7 +181,9 @@ async def test_context_rolls_back_without_commit(sessions, now) -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_read_context_returns_loaded_detached_objects(sessions, now) -> None:
+async def test_clean_read_context_returns_loaded_detached_objects(
+    sessions, now
+) -> None:
     leaf = node(1)
     leaf_id = leaf.id
     with sessions() as session:

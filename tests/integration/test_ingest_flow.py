@@ -72,7 +72,9 @@ async def test_ingest_smoke_appends_split_check_when_leaf_is_full(monkeypatch) -
         "make_embedder",
         lambda _provider, _settings: FakeEmbedder(deterministic_embedding()),
     )
-    monkeypatch.setattr(app_module, "make_summarizer", lambda _provider, _settings: fake_summarizer)
+    monkeypatch.setattr(
+        app_module, "make_summarizer", lambda _provider, _settings: fake_summarizer
+    )
 
     settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=2))
     app = App(settings)
@@ -99,12 +101,16 @@ async def test_ingest_smoke_appends_split_check_when_leaf_is_full(monkeypatch) -
         assert root.doc_count == 2
 
         leaf_documents = session.scalars(
-            select(Document).where(Document.leaf_id == root.id).order_by(Document.name.asc())
+            select(Document)
+            .where(Document.leaf_id == root.id)
+            .order_by(Document.name.asc())
         ).all()
         assert len(leaf_documents) == 2
 
         by_source: dict[str, Document] = {
-            document.source_key: document for document in leaf_documents if document.source_key is not None
+            document.source_key: document
+            for document in leaf_documents
+            if document.source_key is not None
         }
 
         first_doc = by_source["source:alpha"]

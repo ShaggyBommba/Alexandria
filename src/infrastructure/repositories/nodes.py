@@ -84,9 +84,7 @@ class NodeRepo:
 
     async def count(self, id: UUID) -> int:
         count = self._session.scalar(
-            select(func.count())
-            .select_from(Document)
-            .where(Document.leaf_id == id)
+            select(func.count()).select_from(Document).where(Document.leaf_id == id)
         )
         return int(count or 0)
 

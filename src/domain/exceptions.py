@@ -12,5 +12,3 @@ class DomainError(BaseError):
     """Base class for domain rule errors."""
 
     code = "domain.error"
-
-

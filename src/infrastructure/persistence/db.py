@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from infrastructure.config import SQLSettings
 from domain.entity import Base
 
+
 class Db:
     """SQLAlchemy database factory for engines, sessions, and schema setup."""
 

@@ -21,6 +21,7 @@ class AppSettings(BaseModel):
     mcp_port: int = 9002
     worker_poll_interval: int = 3
 
+
 class LoggingSettings(BaseModel):
     level: str = "INFO"
     json_output: bool = False
@@ -29,6 +30,7 @@ class LoggingSettings(BaseModel):
     stream_handler_enabled: bool = True
     stream_format: str = "[%(asctime)s] %(levelname)-8s %(message)s"
     stream_date_format: str = "%H:%M:%S"
+
 
 class QueueSettings(BaseModel):
     """Configuration for durable queue processing."""
@@ -93,6 +95,7 @@ class SQLSettings(BaseModel):
         password = quote_plus(self.password)
         suffix = f"?sslmode={self.ssl_mode}" if self.ssl_mode else ""
         return f"postgresql://{username}:{password}@{self.host}:{self.port}/{self.database}{suffix}"
+
 
 class Settings(BaseSettings):
     app: AppSettings = Field(default_factory=AppSettings)

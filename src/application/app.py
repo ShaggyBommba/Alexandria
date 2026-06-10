@@ -128,7 +128,9 @@ class App:
         # Rerank the hybrid candidates and return the final top results.
         return await self.retrieve_case.run(query, limit=limit)
 
-    async def rerank(self, query: str, hits: list[DocHit], limit: int = 10) -> list[DocHit]:
+    async def rerank(
+        self, query: str, hits: list[DocHit], limit: int = 10
+    ) -> list[DocHit]:
         """Rerank document hits for one query."""
         # Pass candidate documents to the ranking adapter.
         # Return only the highest-ranked hits requested by the caller.

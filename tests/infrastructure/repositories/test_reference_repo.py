@@ -209,7 +209,9 @@ async def test_set_rejects_refs_from_another_source_without_deleting_existing(
 
 
 @pytest.mark.asyncio
-async def test_clear_and_rm_delete_references_and_ignore_missing_rows(ref_session) -> None:
+async def test_clear_and_rm_delete_references_and_ignore_missing_rows(
+    ref_session,
+) -> None:
     refs = repo(ref_session)
     source = node(1)
     first = node(2)

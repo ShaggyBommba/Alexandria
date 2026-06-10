@@ -55,6 +55,9 @@ addopts = "-ra"
 
 [dependency-groups]
 dev = [
+    "nbstripout>=0.9.1",
+    "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "ruff>=0.14.8",
 ]

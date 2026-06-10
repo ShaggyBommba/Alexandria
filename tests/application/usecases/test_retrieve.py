@@ -101,18 +101,24 @@ class FakeRerank:
         return self.result
 
 
-async def test_retrieve_raises_application_error_when_required_dependencies_missing() -> None:
+async def test_retrieve_raises_application_error_when_required_dependencies_missing() -> (
+    None
+):
     # Arrange
     retrieve = Retrieve()
 
     # Act / Assert
-    with pytest.raises(RetrieveDependencyError, match="Embedder, Route, Search") as error:
+    with pytest.raises(
+        RetrieveDependencyError, match="Embedder, Route, Search"
+    ) as error:
         await retrieve.run("query")
 
     assert error.value.code == "app.retrieve.dependency"
 
 
-async def test_retrieve_returns_empty_for_non_positive_limit_without_calling_dependencies() -> None:
+async def test_retrieve_returns_empty_for_non_positive_limit_without_calling_dependencies() -> (
+    None
+):
     # Arrange
     embedding = vector(0.1, 0.2)
     embedder = FakeEmbedder(embedding)

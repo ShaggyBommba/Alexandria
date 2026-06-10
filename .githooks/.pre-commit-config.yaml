@@ -1,0 +1,30 @@
+repos:
+  - repo: local
+    hooks:
+      - id: nbstripout
+        name: Strip Notebook Outputs
+        entry: uv run nbstripout
+        language: system
+        files: \.ipynb$
+
+      - id: ruff-check
+        name: Ruff Linter
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        # Optional: Restrict to src and tests if you don't want it running on root scripts
+        files: ^(src|tests)/ 
+
+      - id: ruff-format
+        name: Ruff Formatter
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        files: ^(src|tests)/
+
+      - id: compileall
+        name: Compile Python Files
+        entry: uv run python -m compileall
+        language: system
+        types: [python]
+        files: ^(src|tests)/
