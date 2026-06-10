@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from application.app import App
+from application.policy import MaxDocsFullness
+from application.ports import SplitPlan
 from infrastructure.config import IngestSettings, Settings
 
 
@@ -106,6 +108,16 @@ class FakeSummarizerWrapper:
         self.target = target
 
 
+class FakeFullness:
+    def full(self, doc_count: int) -> bool:
+        return doc_count >= 1
+
+
+class FakeSplitter:
+    async def split(self, _node, _docs) -> SplitPlan:
+        return SplitPlan(children=[])
+
+
 def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     monkeypatch,
 ) -> None:
@@ -158,7 +170,6 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     assert app.ingest_case.route is app.route_case
     assert app.ingest_case.summarizer is app.summarizer
     assert app.ingest_case.seed is app.seed_case
-    assert app.ingest_case.max_leaf_docs == 7
     assert app.ingest_case.summarizer is app.summarizer
     assert app.retrieve_case.route is app.route_case
     assert app.retrieve_case.refs is app.refs_repo
@@ -168,7 +179,13 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     assert app.refs_case.uow is app.uow
     assert app.lint_case.uow is app.uow
     assert app.lint_case.split is app.split_case
+    assert app.lint_case.fullness is app.fullness
     assert app.split_case.uow is app.uow
+    assert app.split_case.splitter is None
+    assert app.split_case.fullness is app.fullness
+    assert app.ingest_case.fullness is app.fullness
+    assert isinstance(app.fullness, MaxDocsFullness)
+    assert app.fullness.max_docs == 7
     assert factory_calls == []
 
 
@@ -200,3 +217,35 @@ async def test_app_constructs_summarizer_on_first_use(monkeypatch) -> None:
 
     # Assert
     assert deferred.calls == ["summarize"]
+
+
+def test_app_accepts_splitter_and_fullness_injection(monkeypatch) -> None:
+    # Arrange
+    import application.app as app_module
+
+    fake_db = FakeDb(Settings())
+    splitter = FakeSplitter()
+    fullness = FakeFullness()
+
+    monkeypatch.setattr(app_module, "Db", lambda settings: fake_db)
+    monkeypatch.setattr(app_module, "NodeRepo", FakeNodeRepo)
+    monkeypatch.setattr(app_module, "ReferenceRepo", FakeReferenceRepo)
+    monkeypatch.setattr(app_module, "SqlSearch", FakeSqlSearch)
+    monkeypatch.setattr(app_module, "SqlUnitOfWork", FakeSqlUnitOfWork)
+    monkeypatch.setattr(
+        app_module, "make_embedder", lambda provider, settings: FakeEmbedder()
+    )
+    monkeypatch.setattr(
+        app_module, "make_summarizer", lambda _provider, _settings: DeferredSummarizer()
+    )
+
+    # Act
+    app = App(Settings(_env_file=None), splitter=splitter, fullness=fullness)
+
+    # Assert
+    assert app.splitter is splitter
+    assert app.fullness is fullness
+    assert app.split_case.splitter is splitter
+    assert app.split_case.fullness is fullness
+    assert app.lint_case.fullness is fullness
+    assert app.ingest_case.fullness is fullness

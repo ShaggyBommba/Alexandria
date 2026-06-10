@@ -1,7 +1,8 @@
 from functools import lru_cache
 from uuid import UUID
 
-from application.ports import DocHit, DocIn, NodeHit
+from application.policy import MaxDocsFullness
+from application.ports import DocHit, DocIn, FullnessPolicy, NodeHit, Splitter
 from domain.entity import Node
 from application.usecases.ingest import Ingest
 from application.usecases.lint import Lint
@@ -29,9 +30,17 @@ logging = getLogger(__name__)
 class App:
     """Application boundary for alexandria workflows."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        splitter: Splitter | None = None,
+        fullness: FullnessPolicy | None = None,
+    ) -> None:
         """Keep app settings and injected use cases."""
         self.settings = settings
+        self.fullness = fullness or MaxDocsFullness(settings.ingest.max_leaf_docs)
+        self.splitter = splitter
         self.db = Db(settings.database)
         self.sessions = self.db.sessions()
         self.session = self.db.session()
@@ -54,15 +63,23 @@ class App:
         self.route_case = Route(self.nodes)
         self.rerank_case = Rerank()
         self.refs_case = Refs(uow=self.uow)
-        self.split_case = Split(uow=self.uow)
-        self.lint_case = Lint(uow=self.uow, split=self.split_case)
+        self.split_case = Split(
+            uow=self.uow,
+            splitter=self.splitter,
+            fullness=self.fullness,
+        )
+        self.lint_case = Lint(
+            uow=self.uow,
+            split=self.split_case,
+            fullness=self.fullness,
+        )
         self.ingest_case = Ingest(
             uow=self.uow,
             embedder=self.embedder,
             summarizer=self.summarizer,
             seed=self.seed_case,
             route=self.route_case,
-            max_leaf_docs=settings.ingest.max_leaf_docs,
+            fullness=self.fullness,
         )
         self.retrieve_case = Retrieve(
             search=self.search,

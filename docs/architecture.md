@@ -163,6 +163,10 @@ Current external-service ports:
 - `Search`
 - `Ranker`
 
+Current policy ports:
+
+- `FullnessPolicy`
+
 Current concrete adapters for these ports:
 
 - `OpenAIEmbedder` in `src/infrastructure/embeddings.py` implements
@@ -210,7 +214,8 @@ mark
 `append` inserts or revives an idempotent job. `due` reads ready pending jobs
 without locking. `claim` locks ready jobs and marks them running. `mark`
 transitions claimed jobs to `pending`, `done`, or `failed` behavior based on
-`JobStatus`.
+`JobStatus`. Worker boundaries may call `mark(..., retry=False)` for malformed
+payloads that should fail terminally instead of requeueing.
 
 Do not reintroduce older convenience names such as `add`, `jobs`, `release`,
 `done`, or `fail` for current outbox behavior. Use `append`, `due`, `claim`,

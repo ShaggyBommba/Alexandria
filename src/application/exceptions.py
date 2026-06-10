@@ -27,6 +27,24 @@ class IngestLeafError(AppError):
     code = "app.ingest.leaf"
 
 
+class LintDependencyError(AppError):
+    """Raised when lint is missing a required dependency."""
+
+    code = "app.lint.dependency"
+
+
+class SplitDependencyError(AppError):
+    """Raised when split is missing a required dependency."""
+
+    code = "app.split.dependency"
+
+
+class SplitPlanError(AppError):
+    """Raised when an untrusted split plan cannot be applied."""
+
+    code = "app.split.plan"
+
+
 class RouteDependencyError(AppError):
     """Raised when route traversal is missing required dependencies."""
 

@@ -127,7 +127,13 @@ class OutboxRepo:
 
         return list(jobs)
 
-    async def mark(self, id: UUID, status: JobStatus, error: str | None = None) -> None:
+    async def mark(
+        self,
+        id: UUID,
+        status: JobStatus,
+        error: str | None = None,
+        retry: bool = True,
+    ) -> None:
         """Atomically transitions a job's lifecycle status and handles side effects."""
         job = self._session.get(Job, id)
         if job is None:
@@ -144,7 +150,7 @@ class OutboxRepo:
 
             case JobStatus.FAILED:
                 job.done_at = None
-                if job.attempts < job.max_attempts:
+                if retry and job.attempts < job.max_attempts:
                     job.status = JobStatus.PENDING.value
                     job.available_at = now
                 else:
