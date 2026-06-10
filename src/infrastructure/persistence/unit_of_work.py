@@ -7,6 +7,13 @@ from types import TracebackType
 from typing import cast
 
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
+from application.ports import (
+    DocumentRepo as DocumentRepoPort,
+    NodeRepo as NodeRepoPort,
+    OutboxRepo as OutboxRepoPort,
+    ReferenceRepo as ReferenceRepoPort,
+    UnitOfWork,
+)
 
 from infrastructure.config import QueueSettings
 from infrastructure.repositories.documents import DocumentRepo
@@ -22,8 +29,13 @@ def session_scope() -> Hashable | None:
         return None
 
 
-class SqlUnitOfWork:
+class SqlUnitOfWork(UnitOfWork):
     """Coordinates repository operations through a task-scoped SQLAlchemy session."""
+
+    nodes: NodeRepoPort
+    docs: DocumentRepoPort
+    refs: ReferenceRepoPort
+    outbox: OutboxRepoPort
 
     def __init__(
         self,
