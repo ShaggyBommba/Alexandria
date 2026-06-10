@@ -301,6 +301,29 @@ claim -> app.lint -> mark
 Workers should call application usecases or app facade methods. They should not
 perform repository-level split or reference decisions directly.
 
+## Presentation Entrypoints
+
+Public workflow entrypoints live under `src/presentation`.
+
+Current public local surfaces:
+
+- FastAPI exposes `GET /health`, `GET /version`, `POST /ingest`, and
+  `GET /retrieve`.
+- Click exposes `version`, `ingest`, `retrieve`, and `refs` commands.
+- MCP exposes `ingest` and `retrieve` tools through `FastMCP` and runs the
+  streamable HTTP transport from the `mcp` console entrypoint.
+
+Entrypoints validate transport input, translate it into application boundary
+values such as `DocIn`, call `App`, and serialize transport responses. API
+workflow requests use request-scoped `App` instances so routing and search do
+not share a long-lived SQLAlchemy session across requests. They translate
+expected `BaseError` failures into transport-specific errors: API 400 payloads,
+`click.ClickException`, or MCP tool errors.
+
+Entrypoints should not import repositories for workflow decisions. Document hit
+responses expose client-useful document fields and scores, but not embeddings
+or ORM internals.
+
 ## Retrieval Flow
 
 Expected retrieval shape:

@@ -41,6 +41,13 @@ class Db:
         self.extensions()
         Base.metadata.create_all(self.engine())
 
+    def close(self) -> None:
+        """Dispose the database engine when this factory is no longer needed."""
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None
+            self._sessions = None
+
     def drop_all(self) -> None:
         """Drop all known database tables."""
         Base.metadata.drop_all(self.engine())

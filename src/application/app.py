@@ -95,6 +95,16 @@ class App:
         """Create database schema for app initialization."""
         self.db.create_all()
 
+    def close(self) -> None:
+        """Close app-owned database resources."""
+        self.session.close()
+        close = getattr(self.uow, "close", None)
+        if callable(close):
+            close()
+        close_db = getattr(self.db, "close", None)
+        if callable(close_db):
+            close_db()
+
     async def seed(self) -> Node:
         """Ensure the index has a root node."""
         # Ensure ingest and retrieval have a root node to start from.
