@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from application.exceptions import AppError
 from application.ports import DocHit, DocIn
 from domain.entity import Document
+from infrastructure.exceptions import EmbedderClientError, SummarizerConfigError
 from presentation.cli import app as cli_module
 
 
@@ -42,8 +43,8 @@ class FakeApp:
     def __init__(self) -> None:
         self.ingest_calls: list[DocIn] = []
         self.retrieve_calls: list[tuple[str, int]] = []
-        self.ingest_error: AppError | None = None
-        self.retrieve_error: AppError | None = None
+        self.ingest_error: Exception | None = None
+        self.retrieve_error: Exception | None = None
 
     async def ingest(self, doc: DocIn) -> UUID:
         self.ingest_calls.append(doc)
@@ -70,14 +71,16 @@ def test_cli_ingest_prints_created_document_id(monkeypatch) -> None:
     # Act
     result = run(
         app,
-        ["ingest", "--name", " Alpha ", "--body", " Body ", "--source-key", " "],
+        ["ingest", "--name", " Alpha ", "--body", "\n  Body\n", "--source-key", " "],
         monkeypatch,
     )
 
     # Assert
     assert result.exit_code == 0
     assert result.output.strip() == str(uid(1))
-    assert app.ingest_calls == [DocIn(name="Alpha", body="Body", source_key=None)]
+    assert app.ingest_calls == [
+        DocIn(name="Alpha", body="\n  Body\n", source_key=None)
+    ]
 
 
 def test_cli_retrieve_prints_deterministic_json(monkeypatch) -> None:
@@ -118,10 +121,17 @@ def test_cli_validates_user_input(monkeypatch) -> None:
         monkeypatch,
     )
     retrieve_result = run(app, ["retrieve", "alpha", "--limit", "0"], monkeypatch)
+    body_result = run(
+        app,
+        ["ingest", "--name", "Alpha", "--body", " "],
+        monkeypatch,
+    )
 
     # Assert
     assert ingest_result.exit_code != 0
     assert "value must not be blank" in ingest_result.output
+    assert body_result.exit_code != 0
+    assert "value must not be blank" in body_result.output
     assert retrieve_result.exit_code != 0
     assert "greater than or equal to 1" in retrieve_result.output
     assert app.ingest_calls == []
@@ -147,3 +157,24 @@ def test_cli_translates_application_errors(monkeypatch) -> None:
     assert "cannot ingest" in ingest_result.output
     assert retrieve_result.exit_code != 0
     assert "cannot retrieve" in retrieve_result.output
+
+
+def test_cli_translates_expected_infrastructure_errors(monkeypatch) -> None:
+    # Arrange
+    app = FakeApp()
+    app.ingest_error = SummarizerConfigError("missing summarizer key")
+    app.retrieve_error = EmbedderClientError("embedding unavailable")
+
+    # Act
+    ingest_result = run(
+        app,
+        ["ingest", "--name", "Alpha", "--body", "Body"],
+        monkeypatch,
+    )
+    retrieve_result = run(app, ["retrieve", "alpha"], monkeypatch)
+
+    # Assert
+    assert ingest_result.exit_code != 0
+    assert "missing summarizer key" in ingest_result.output
+    assert retrieve_result.exit_code != 0
+    assert "embedding unavailable" in retrieve_result.output

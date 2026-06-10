@@ -6,7 +6,10 @@ from fastapi.testclient import TestClient
 
 from application.exceptions import AppError
 from application.ports import DocHit, DocIn
+from infrastructure.config import Settings
+from infrastructure.exceptions import EmbedderClientError, SummarizerConfigError
 from domain.entity import Document
+from presentation.api import app as api_module
 from presentation.api.app import api
 
 
@@ -42,8 +45,8 @@ class FakeApp:
     def __init__(self) -> None:
         self.ingest_calls: list[DocIn] = []
         self.retrieve_calls: list[tuple[str, int]] = []
-        self.ingest_error: AppError | None = None
-        self.retrieve_error: AppError | None = None
+        self.ingest_error: Exception | None = None
+        self.retrieve_error: Exception | None = None
 
     async def ingest(self, doc: DocIn) -> UUID:
         self.ingest_calls.append(doc)
@@ -80,13 +83,15 @@ def test_api_ingest_validates_and_calls_app_with_doc_in() -> None:
     with client(app) as item:
         response = item.post(
             "/ingest",
-            json={"name": " Alpha ", "body": " Body ", "source_key": " "},
+            json={"name": " Alpha ", "body": "\n  Body\n", "source_key": " "},
         )
 
     # Assert
     assert response.status_code == 200
     assert response.json() == {"id": str(uid(1))}
-    assert app.ingest_calls == [DocIn(name="Alpha", body="Body", source_key=None)]
+    assert app.ingest_calls == [
+        DocIn(name="Alpha", body="\n  Body\n", source_key=None)
+    ]
 
 
 def test_api_retrieve_returns_public_hit_data() -> None:
@@ -124,9 +129,11 @@ def test_api_rejects_invalid_public_inputs() -> None:
     # Act / Assert
     with client(app) as item:
         ingest_response = item.post("/ingest", json={"name": " ", "body": "Body"})
+        body_response = item.post("/ingest", json={"name": "Alpha", "body": " "})
         retrieve_response = item.get("/retrieve", params={"query": " ", "limit": 0})
 
     assert ingest_response.status_code == 422
+    assert body_response.status_code == 422
     assert retrieve_response.status_code == 422
     assert app.ingest_calls == []
     assert app.retrieve_calls == []
@@ -154,3 +161,71 @@ def test_api_translates_application_errors() -> None:
     assert retrieve_response.json() == {
         "error": {"code": "app.public", "message": "cannot retrieve"}
     }
+
+
+def test_api_translates_expected_infrastructure_errors() -> None:
+    # Arrange
+    app = FakeApp()
+    app.ingest_error = SummarizerConfigError("missing summarizer key")
+    app.retrieve_error = EmbedderClientError("embedding unavailable")
+
+    # Act / Assert
+    with client(app) as item:
+        ingest_response = item.post(
+            "/ingest",
+            json={"name": "Alpha", "body": "Body"},
+        )
+        retrieve_response = item.get("/retrieve", params={"query": "alpha"})
+
+    assert ingest_response.status_code == 400
+    assert ingest_response.json() == {
+        "error": {
+            "code": "infra.summarizer.config",
+            "message": "missing summarizer key",
+        }
+    }
+    assert retrieve_response.status_code == 400
+    assert retrieve_response.json() == {
+        "error": {
+            "code": "infra.embedder.client",
+            "message": "embedding unavailable",
+        }
+    }
+
+
+def test_api_uses_request_scoped_apps_for_real_workflows(monkeypatch) -> None:
+    # Arrange
+    instances: list[ScopedApp] = []
+
+    class HealthApp:
+        health = True
+        version = "test-version"
+
+    class ScopedApp(FakeApp):
+        def __init__(self, settings: Settings) -> None:
+            super().__init__()
+            self.settings = settings
+            self.closed = False
+            instances.append(self)
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(api_module, "get_app", lambda: HealthApp())
+    monkeypatch.setattr(api_module, "App", ScopedApp)
+
+    # Act
+    with TestClient(api_module.api()) as item:
+        ingest_response = item.post(
+            "/ingest",
+            json={"name": "Alpha", "body": "Body"},
+        )
+        retrieve_response = item.get("/retrieve", params={"query": "alpha"})
+
+    # Assert
+    assert ingest_response.status_code == 200
+    assert retrieve_response.status_code == 200
+    assert len(instances) == 2
+    assert all(instance.closed for instance in instances)
+    assert instances[0].ingest_calls == [DocIn(name="Alpha", body="Body")]
+    assert instances[1].retrieve_calls == [("alpha", 10)]

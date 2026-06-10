@@ -6,8 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from application.exceptions import AppError
 from application.ports import DocHit, DocIn
+from domain.exceptions import BaseError
 
 
 class IngestRequest(BaseModel):
@@ -17,13 +17,20 @@ class IngestRequest(BaseModel):
     body: str
     source_key: str | None = None
 
-    @field_validator("name", "body")
+    @field_validator("name")
     @classmethod
-    def required_text(cls, value: str) -> str:
+    def required_name(cls, value: str) -> str:
         text = value.strip()
         if not text:
             raise ValueError("value must not be blank")
         return text
+
+    @field_validator("body")
+    @classmethod
+    def required_body(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must not be blank")
+        return value
 
     @field_validator("source_key")
     @classmethod
@@ -100,8 +107,8 @@ class RetrieveResponse(BaseModel):
         return cls(hits=[DocumentHitResponse.from_hit(hit) for hit in hits])
 
 
-def error_payload(exc: AppError) -> dict[str, dict[str, str]]:
-    """Return the transport-neutral shape for expected application errors."""
+def error_payload(exc: BaseError) -> dict[str, dict[str, str]]:
+    """Return the transport-neutral shape for expected workflow errors."""
     return {"error": {"code": exc.code, "message": str(exc)}}
 
 

@@ -12,8 +12,8 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from application.app import App, get_app
-from application.exceptions import AppError
 from infrastructure.config import get_settings
+from domain.exceptions import BaseError
 from presentation.contracts import (
     IngestRequest,
     IngestResponse,
@@ -31,6 +31,21 @@ async def lifespan(api: FastAPI) -> AsyncGenerator[None, None]:
     if getattr(api.state, "app", None) is None:
         api.state.app = get_app()
     yield
+
+
+@asynccontextmanager
+async def scoped(request: Request) -> AsyncGenerator[App, None]:
+    """Yield an app with request-scoped workflow sessions."""
+    injected: App | None = getattr(request.app.state, "scoped", None)
+    if injected is not None:
+        yield injected
+        return
+
+    app = App(request.app.state.settings)
+    try:
+        yield app
+    finally:
+        app.close()
 
 
 def validation_detail(exc: ValidationError) -> list[dict[str, object]]:
@@ -55,6 +70,8 @@ def api(app: App | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     api.state.app = app
+    api.state.scoped = app
+    api.state.settings = settings
 
     @api.get("/health")
     def health(request: Request) -> dict[str, bool]:
@@ -71,10 +88,10 @@ def api(app: App | None = None) -> FastAPI:
         request: Request,
         payload: IngestRequest,
     ):
-        app: App = request.app.state.app
         try:
-            id = await app.ingest(payload.doc())
-        except AppError as exc:
+            async with scoped(request) as app:
+                id = await app.ingest(payload.doc())
+        except BaseError as exc:
             return JSONResponse(status_code=400, content=error_payload(exc))
 
         return IngestResponse(id=id)
@@ -90,10 +107,10 @@ def api(app: App | None = None) -> FastAPI:
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
 
-        app: App = request.app.state.app
         try:
-            hits = await app.retrieve(payload.query, limit=payload.limit)
-        except AppError as exc:
+            async with scoped(request) as app:
+                hits = await app.retrieve(payload.query, limit=payload.limit)
+        except BaseError as exc:
             return JSONResponse(status_code=400, content=error_payload(exc))
 
         return RetrieveResponse.from_hits(hits)

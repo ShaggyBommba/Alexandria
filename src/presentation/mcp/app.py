@@ -6,7 +6,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
 from application.app import App, get_app
-from application.exceptions import AppError
+from domain.exceptions import BaseError
 from infrastructure.config import get_settings
 from presentation.contracts import (
     IngestRequest,
@@ -17,7 +17,7 @@ from presentation.contracts import (
 )
 
 
-def tool_error(exc: AppError | ValidationError) -> ValueError:
+def tool_error(exc: BaseError | ValidationError) -> ValueError:
     """Convert expected public failures into MCP tool errors."""
     if isinstance(exc, ValidationError):
         return ValueError(validation_message(exc))
@@ -47,7 +47,7 @@ def mcp(app: App | None = None) -> FastMCP:
         try:
             payload = IngestRequest(name=name, body=body, source_key=source_key)
             id = await current_app().ingest(payload.doc())
-        except (AppError, ValidationError) as exc:
+        except (BaseError, ValidationError) as exc:
             raise tool_error(exc) from exc
 
         return IngestResponse(id=id).model_dump(mode="json")
@@ -58,7 +58,7 @@ def mcp(app: App | None = None) -> FastMCP:
         try:
             payload = RetrieveRequest(query=query, limit=limit)
             hits = await current_app().retrieve(payload.query, limit=payload.limit)
-        except (AppError, ValidationError) as exc:
+        except (BaseError, ValidationError) as exc:
             raise tool_error(exc) from exc
 
         return RetrieveResponse.from_hits(hits).model_dump(mode="json")

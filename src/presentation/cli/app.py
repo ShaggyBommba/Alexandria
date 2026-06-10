@@ -8,7 +8,7 @@ import click
 from pydantic import ValidationError
 
 from application.app import App, get_app
-from application.exceptions import AppError
+from domain.exceptions import BaseError
 from presentation.contracts import (
     IngestRequest,
     RetrieveRequest,
@@ -50,7 +50,7 @@ def ingest(app: App, name: str, body: str, source_key: str | None) -> None:
         id = asyncio.run(app.ingest(payload.doc()))
     except ValidationError as exc:
         raise click.ClickException(validation_message(exc)) from exc
-    except AppError as exc:
+    except BaseError as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(str(id))
@@ -67,7 +67,7 @@ def retrieve(app: App, query: str, limit: int) -> None:
         hits = asyncio.run(app.retrieve(payload.query, limit=payload.limit))
     except ValidationError as exc:
         raise click.ClickException(validation_message(exc)) from exc
-    except AppError as exc:
+    except BaseError as exc:
         raise click.ClickException(str(exc)) from exc
 
     response = RetrieveResponse.from_hits(hits).model_dump(mode="json")
@@ -86,7 +86,7 @@ def build_refs(app: App, node_id: str) -> None:
 
     try:
         asyncio.run(app.refs(id))
-    except AppError as exc:
+    except BaseError as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(f"built refs for {id}")

@@ -314,9 +314,11 @@ Current public local surfaces:
   streamable HTTP transport from the `mcp` console entrypoint.
 
 Entrypoints validate transport input, translate it into application boundary
-values such as `DocIn`, call `App`, and serialize transport responses. They
-translate expected `AppError` failures into transport-specific errors: API 400
-payloads, `click.ClickException`, or MCP tool errors.
+values such as `DocIn`, call `App`, and serialize transport responses. API
+workflow requests use request-scoped `App` instances so routing and search do
+not share a long-lived SQLAlchemy session across requests. They translate
+expected `BaseError` failures into transport-specific errors: API 400 payloads,
+`click.ClickException`, or MCP tool errors.
 
 Entrypoints should not import repositories for workflow decisions. Document hit
 responses expose client-useful document fields and scores, but not embeddings
