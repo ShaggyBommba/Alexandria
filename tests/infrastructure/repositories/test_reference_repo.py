@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from application.ports import ReferenceRepo as ReferencePort
@@ -84,6 +85,31 @@ class FakeSession:
     def execute(self, statement):
         self.statement = statement
         raise AssertionError("execute should not be called")
+
+
+class FakeBind:
+    dialect = postgresql.dialect()
+
+
+class FakeResult:
+    def __init__(self, rows: list[tuple[Reference, Node, float]]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[tuple[Reference, Node, float]]:
+        return self.rows
+
+
+class FakePgSession:
+    def __init__(self, rows: list[tuple[Reference, Node, float]]) -> None:
+        self.rows = rows
+        self.statement = None
+
+    def get_bind(self) -> FakeBind:
+        return FakeBind()
+
+    def execute(self, statement):
+        self.statement = statement
+        return FakeResult(self.rows)
 
 
 def test_reference_repo_satisfies_port(ref_session) -> None:
@@ -220,6 +246,40 @@ async def test_clear_and_rm_delete_references_and_ignore_missing_rows(
     assert await refs.out(source.id) == []
     assert await refs.get(removed.id) is None
     assert [item.id for item in await refs.out(other_source.id)] == [kept.id]
+
+
+@pytest.mark.asyncio
+async def test_near_uses_bounded_pgvector_query_for_postgres() -> None:
+    target = node(3, embedding=vector(1.0, 0.0))
+    ref = Reference(
+        id=uid(10),
+        from_node_id=uid(1),
+        to_node_id=target.id,
+        distance=0.12,
+        rank=1,
+    )
+    session = FakePgSession([(ref, target, 0.04)])
+    refs = ReferenceRepo(session)
+
+    result = await refs.near({uid(2), uid(1)}, vector(1.0, 0.0), limit=3)
+
+    assert result[0].ref is ref
+    assert result[0].node is target
+    assert result[0].distance == pytest.approx(0.04)
+    assert session.statement is not None
+    compiled = session.statement.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "nodes.embedding <=> %(embedding_1)s AS distance" in sql
+    assert 'JOIN nodes ON "references".to_node_id = nodes.id' in sql
+    assert '"references".from_node_id IN' in sql
+    assert "nodes.kind = %(kind_1)s" in sql
+    assert "nodes.status = %(status_1)s" in sql
+    assert 'ORDER BY distance ASC, "references".rank ASC, "references".id ASC' in sql
+    assert "LIMIT %(param_1)s" in sql
+    assert compiled.params["from_node_id_1"] == [uid(1), uid(2)]
+    assert compiled.params["kind_1"] == "leaf"
+    assert compiled.params["status_1"] == "active"
+    assert compiled.params["param_1"] == 3
 
 
 @pytest.mark.asyncio

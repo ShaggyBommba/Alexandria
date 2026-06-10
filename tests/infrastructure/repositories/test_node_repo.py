@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from application.ports import NodeRepo as NodePort
@@ -70,6 +71,31 @@ def repo(session: Session) -> NodeRepo:
     return NodeRepo(session)
 
 
+class FakeBind:
+    dialect = postgresql.dialect()
+
+
+class FakeResult:
+    def __init__(self, rows: list[tuple[Node, float]]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[tuple[Node, float]]:
+        return self.rows
+
+
+class FakeSession:
+    def __init__(self, rows: list[tuple[Node, float]]) -> None:
+        self.rows = rows
+        self.statement = None
+
+    def get_bind(self) -> FakeBind:
+        return FakeBind()
+
+    def execute(self, statement):
+        self.statement = statement
+        return FakeResult(self.rows)
+
+
 def test_node_repo_satisfies_port(node_session) -> None:
     nodes = repo(node_session)
 
@@ -132,6 +158,36 @@ async def test_leaves_returns_active_leaves_with_limit(node_session) -> None:
     result = await nodes.leaves(limit=1)
 
     assert [item.id for item in result] == [first.id]
+
+
+@pytest.mark.asyncio
+async def test_near_uses_bounded_pgvector_query_with_filters() -> None:
+    matched = node(3, embedding=vector(1.0, 0.0))
+    session = FakeSession([(matched, 0.12)])
+    nodes = NodeRepo(session)
+
+    result = await nodes.near(
+        vector(1.0, 0.0),
+        limit=2,
+        parent=uid(1),
+        exclude={uid(4)},
+    )
+
+    assert result[0].node is matched
+    assert result[0].distance == 0.12
+    assert session.statement is not None
+    compiled = session.statement.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "nodes.embedding <=> %(embedding_1)s AS distance" in sql
+    assert "nodes.status = %(status_1)s" in sql
+    assert "nodes.parent_id = %(parent_id_1)s::UUID" in sql
+    assert "nodes.id NOT IN" in sql
+    assert "ORDER BY distance ASC, nodes.id ASC" in sql
+    assert "LIMIT %(param_1)s" in sql
+    assert compiled.params["status_1"] == "active"
+    assert compiled.params["parent_id_1"] == uid(1)
+    assert compiled.params["id_1"] == [uid(4)]
+    assert compiled.params["param_1"] == 2
 
 
 @pytest.mark.asyncio

@@ -54,6 +54,24 @@ class ReferenceRepo:
         if not ids or limit <= 0:
             return []
 
+        if self.vector_sql_enabled():
+            distance = Node.embedding.cosine_distance(embedding).label("distance")
+            rows = self._session.execute(
+                select(Reference, Node, distance)
+                .join(Node, Reference.to_node_id == Node.id)
+                .where(
+                    Reference.from_node_id.in_(sorted(ids)),
+                    Node.kind == "leaf",
+                    Node.status == "active",
+                )
+                .order_by(distance.asc(), Reference.rank.asc(), Reference.id.asc())
+                .limit(limit)
+            ).all()
+            return [
+                RefHit(ref=ref, node=node, distance=float(distance))
+                for ref, node, distance in rows
+            ]
+
         rows = self._session.execute(
             select(Reference, Node)
             .join(Node, Reference.to_node_id == Node.id)
@@ -74,6 +92,10 @@ class ReferenceRepo:
         ]
         hits.sort(key=lambda hit: (hit.distance, hit.ref.rank, str(hit.ref.id)))
         return hits[:limit]
+
+    def vector_sql_enabled(self) -> bool:
+        """Return whether this session can execute pgvector distance SQL."""
+        return self._session.get_bind().dialect.name == "postgresql"
 
     async def set(self, id: UUID, refs: list[Reference]) -> None:
         for ref in refs:
