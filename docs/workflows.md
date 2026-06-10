@@ -323,3 +323,79 @@ Good questions include:
 
 When repository context already answers the question, make the reasonable choice
 and continue.
+
+## Creating Delivery Plans
+
+Use this workflow when the user asks for a delivery plan, roadmap, milestone
+plan, implementation sequence, phased rollout, or asks to rewrite a plan so it
+is more delivery-focused.
+
+Delivery plans must describe working milestones, not activity buckets. A phase
+is complete only when it ends in a runnable capability that can be exercised
+locally through an intended boundary and validated with evidence.
+
+Before creating or rewriting a delivery plan:
+
+- Load the required context from `AGENTS.md`.
+- Read `docs/architecture.md` when the plan covers code, app wiring, models,
+  repositories, adapters, workers, queues, outbox, entrypoints, or config.
+- Read `docs/tests.md` when the plan defines validation, smoke tests,
+  notebooks, or test strategy.
+- Inspect the current plan file when updating an existing plan.
+- Preserve unrelated local changes.
+
+A delivery plan should include:
+
+- the current baseline and known gaps
+- a dependency graph when sequencing matters
+- one section per delivery milestone
+- the working milestone for each delivery
+- the capability delivered
+- the primary boundary users or developers will exercise
+- the implementation slice needed to reach the milestone
+- acceptance criteria stated as observable behavior
+- validation commands, with `task test` as final evaluation when code changes
+  are part of the delivery
+- delivery evidence such as tests, smoke checks, notebooks, or docs
+- explicit non-scope items and deferred risks
+
+Every delivery milestone must satisfy these rules:
+
+- It must end with behavior that works locally.
+- It must be demonstrable through an application, worker, API, CLI, MCP, or
+  other intended boundary.
+- It must avoid phases that only say "setup", "wiring", "tests", or
+  "scaffolding" unless those tasks are part of a larger working milestone.
+- It must name the smallest useful capability a developer can run after the
+  phase lands.
+- It must include deterministic validation that does not require external
+  provider credentials unless the milestone is explicitly a provider-backed
+  delivery.
+- It must keep architecture boundaries intact: application use cases decide,
+  repositories persist, adapters translate provider or infrastructure details,
+  workers call app boundaries, and entrypoints translate transport concerns.
+
+Prefer delivery names based on working outcomes:
+
+```text
+Delivery 1: Local ingest works
+Delivery 2: Local retrieval works
+Delivery 3: Split-check lifecycle works
+Delivery 4: Public local workflows work
+Delivery 5: Relevance and provider path works
+Delivery 6: Release-ready local workflow
+```
+
+Avoid delivery names based only on activities:
+
+```text
+Phase 1: Add tests
+Phase 2: Wire dependencies
+Phase 3: Refactor services
+Phase 4: Setup notebooks
+```
+
+When rewriting an existing task-heavy plan, preserve useful technical details
+but move them under milestone sections as implementation slices, acceptance
+criteria, validation, or non-scope. Remove copy-paste prompt boilerplate unless
+the user explicitly wants prompts as the artifact.
