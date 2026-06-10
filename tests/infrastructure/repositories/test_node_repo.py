@@ -5,7 +5,6 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from application.ports import NodeRepo as NodePort
@@ -69,24 +68,6 @@ def doc(value: int, leaf: Node) -> Document:
 
 def repo(session: Session) -> NodeRepo:
     return NodeRepo(session)
-
-
-class FakeResult:
-    def __init__(self, rows: list[tuple[Node, float]]) -> None:
-        self.rows = rows
-
-    def all(self) -> list[tuple[Node, float]]:
-        return self.rows
-
-
-class FakeSession:
-    def __init__(self, rows: list[tuple[Node, float]]) -> None:
-        self.rows = rows
-        self.statement = None
-
-    def execute(self, statement):
-        self.statement = statement
-        return FakeResult(self.rows)
 
 
 def test_node_repo_satisfies_port(node_session) -> None:
@@ -154,32 +135,46 @@ async def test_leaves_returns_active_leaves_with_limit(node_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_near_uses_pgvector_cosine_query_with_filters() -> None:
-    matched = node(3, embedding=vector(1.0, 0.0))
-    session = FakeSession([(matched, 0.12)])
-    nodes = NodeRepo(session)
+async def test_near_filters_and_orders_nodes_by_deterministic_distance(
+    node_session,
+) -> None:
+    nodes = repo(node_session)
+    root = node(1, kind="branch")
+    exact_later = node(5, parent=root, embedding=vector(1.0, 0.0))
+    excluded = node(2, parent=root, embedding=vector(1.0, 0.0))
+    exact_first = node(3, parent=root, embedding=vector(1.0, 0.0))
+    farther = node(4, parent=root, embedding=vector(0.0, 1.0))
+    retired = node(6, parent=root, embedding=vector(1.0, 0.0), status="retired")
+    other_parent = node(7, embedding=vector(1.0, 0.0))
+    node_session.add_all(
+        [root, exact_later, excluded, exact_first, farther, retired, other_parent]
+    )
+    node_session.flush()
 
     result = await nodes.near(
         vector(1.0, 0.0),
         limit=2,
-        parent=uid(1),
-        exclude={uid(4)},
+        parent=root.id,
+        exclude={excluded.id},
     )
 
-    assert result[0].node is matched
-    assert result[0].distance == 0.12
-    assert session.statement is not None
-    compiled = session.statement.compile(dialect=postgresql.dialect())
-    sql = str(compiled)
-    assert "nodes.embedding <=> %(embedding_1)s AS distance" in sql
-    assert "nodes.status = %(status_1)s" in sql
-    assert "nodes.parent_id = %(parent_id_1)s::UUID" in sql
-    assert "nodes.id NOT IN" in sql
-    assert "ORDER BY distance ASC, nodes.id ASC" in sql
-    assert compiled.params["status_1"] == "active"
-    assert compiled.params["parent_id_1"] == uid(1)
-    assert compiled.params["id_1"] == [uid(4)]
-    assert compiled.params["param_1"] == 2
+    assert [hit.node.id for hit in result] == [exact_first.id, exact_later.id]
+    assert [hit.distance for hit in result] == [pytest.approx(0.0), pytest.approx(0.0)]
+
+
+@pytest.mark.asyncio
+async def test_near_returns_empty_for_non_positive_limit(node_session) -> None:
+    nodes = repo(node_session)
+    root = node(1, kind="branch")
+    child = node(2, parent=root)
+    node_session.add_all([root, child])
+    node_session.flush()
+
+    zero = await nodes.near(vector(1.0), limit=0, parent=root.id)
+    negative = await nodes.near(vector(1.0), limit=-1, parent=root.id)
+
+    assert zero == []
+    assert negative == []
 
 
 @pytest.mark.asyncio

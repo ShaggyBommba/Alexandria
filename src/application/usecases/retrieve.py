@@ -66,12 +66,17 @@ class Retrieve:
         query_embedding = await self.embedder.embed(query)
         routed = await self.route.run(query_embedding, limit=limit)
         leaves = {hit.node.id for hit in routed}
+        if not leaves:
+            return []
 
         if self.refs is not None:
             refs = await self.refs.near(set(leaves), query_embedding, limit)
             leaves.update(hit.node.id for hit in refs)
 
         hits = await self.search.find(query, query_embedding, leaves, limit)
+        if not hits:
+            return []
+
         if self.rerank is not None:
             return await self.rerank.run(query, hits, limit)
 

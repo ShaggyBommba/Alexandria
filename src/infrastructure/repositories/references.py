@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from application.ports import RefHit
 from domain.entity import Node, Reference
 from infrastructure.exceptions import ReferenceSourceMismatch
+from infrastructure.utils.vector import cosine_distance
 
 
 class ReferenceRepo:
@@ -53,22 +54,26 @@ class ReferenceRepo:
         if not ids or limit <= 0:
             return []
 
-        distance = Node.embedding.cosine_distance(embedding).label("distance")
         rows = self._session.execute(
-            select(Reference, Node, distance)
+            select(Reference, Node)
             .join(Node, Reference.to_node_id == Node.id)
             .where(
                 Reference.from_node_id.in_(sorted(ids)),
                 Node.kind == "leaf",
                 Node.status == "active",
             )
-            .order_by(distance.asc(), Reference.rank.asc(), Reference.id.asc())
-            .limit(limit)
+            .order_by(Reference.rank.asc(), Reference.id.asc())
         ).all()
-        return [
-            RefHit(ref=ref, node=node, distance=float(distance))
-            for ref, node, distance in rows
+        hits = [
+            RefHit(
+                ref=ref,
+                node=node,
+                distance=cosine_distance(embedding, list(node.embedding)),
+            )
+            for ref, node in rows
         ]
+        hits.sort(key=lambda hit: (hit.distance, hit.ref.rank, str(hit.ref.id)))
+        return hits[:limit]
 
     async def set(self, id: UUID, refs: list[Reference]) -> None:
         for ref in refs:
