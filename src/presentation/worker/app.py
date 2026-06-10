@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
@@ -24,15 +22,6 @@ class SplitCheckPayload(BaseModel):
 
 class WorkerPayloadError(ValueError):
     """Raised when a queued job payload cannot be handled."""
-
-
-@dataclass(frozen=True)
-class ClaimedJob:
-    """Detached job data needed by the worker after claim commit."""
-
-    id: UUID
-    kind: str
-    payload: dict[str, Any]
 
 
 def kind_value(kind: JobKind | str) -> str:
@@ -80,36 +69,33 @@ class Worker:
             if not jobs:
                 return 0
 
-            claimed = [
-                ClaimedJob(
-                    id=job.id,
-                    kind=kind_value(job.kind),
-                    payload=dict(job.payload),
-                )
-                for job in jobs
-            ]
-            session.commit()
-
-        processed = 0
-        for job in claimed:
-            with self.app.db.sessions()() as session:
-                repo = OutboxRepo(session, self.app.settings.queue)
-                try:
-                    await self.handle(job)
-                    await repo.mark(job.id, JobStatus.DONE)
-                except WorkerPayloadError as error:
-                    logger.warning("Job %s has malformed payload: %s", job.id, error)
-                    await repo.mark(job.id, JobStatus.FAILED, str(error), retry=False)
-                except Exception as error:
-                    logger.warning("Job %s failed processing: %s", job.id, error)
-                    await repo.mark(job.id, JobStatus.FAILED, str(error))
+            try:
+                for job in jobs:
+                    try:
+                        await self.handle(job)
+                        await repo.mark(job.id, JobStatus.DONE)
+                    except WorkerPayloadError as error:
+                        logger.warning(
+                            "Job %s has malformed payload: %s", job.id, error
+                        )
+                        await repo.mark(
+                            job.id,
+                            JobStatus.FAILED,
+                            str(error),
+                            retry=False,
+                        )
+                    except Exception as error:
+                        logger.warning("Job %s failed processing: %s", job.id, error)
+                        await repo.mark(job.id, JobStatus.FAILED, str(error))
 
                 session.commit()
-                processed += 1
+                return len(jobs)
+            except Exception:
+                session.rollback()
+                logger.exception("Batch failed; rolled back changes")
+                raise
 
-        return processed
-
-    async def handle(self, job: ClaimedJob | Job) -> None:
+    async def handle(self, job: Job) -> None:
         if (
             self.kind != JobKind.SPLIT_CHECK
             or kind_value(job.kind) != JobKind.SPLIT_CHECK.value

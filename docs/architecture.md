@@ -260,11 +260,13 @@ the current state still requires work.
 Splits a full leaf into child nodes and redistributes documents. It should call
 the `Splitter` port, validate the returned `SplitPlan` against local document
 ids, create children, move documents, update the parent node, clear stale
-references, and queue follow-up reference rebuild work where needed.
+references, and leave follow-up reference rebuild work to a later delivery.
 
-Do not hold a database transaction open during the LLM call. Claim or mark
-state before the call, validate local truth after the call, then commit the
-durable changes in one transaction.
+Do not hold a database transaction open during the LLM call. Mark the source
+leaf as `splitting` before the call so new routing will not target it, validate
+local truth after the call, then commit the child, document, source, and stale
+reference changes together. If the splitter fails or returns an invalid plan,
+restore the source leaf to `active`.
 
 ### Refs
 

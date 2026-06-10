@@ -44,24 +44,31 @@ class Split:
 
         split_source = copy_node(source)
         split_docs = [copy_doc(doc) for doc in docs]
-        await uow.rollback()
+        source.status = "splitting"
+        source.doc_count = len(docs)
+        await uow.nodes.save(source)
+        await uow.commit()
 
-        plan = await self.splitter.split(split_source, split_docs)
+        try:
+            plan = await self.splitter.split(split_source, split_docs)
+        except Exception:
+            await self.release(node_id)
+            raise
 
         source = await uow.nodes.get(node_id)
-        if not self.eligible(source):
+        if not self.claimed(source):
             await uow.rollback()
             return
 
         docs = await uow.docs.leaf(node_id)
         if not self.fullness.full(len(docs)):
-            await uow.rollback()
+            await self.release(node_id)
             return
 
         try:
             children = self.validate(plan, docs)
         except SplitPlanError:
-            await uow.rollback()
+            await self.release(node_id)
             raise
 
         for child in children:
@@ -88,6 +95,26 @@ class Split:
     def eligible(self, node: Node | None) -> bool:
         """Return whether a node is a current leaf candidate for splitting."""
         return node is not None and node.status == "active" and node.kind == "leaf"
+
+    def claimed(self, node: Node | None) -> bool:
+        """Return whether this split still owns a claimed source leaf."""
+        return node is not None and node.status == "splitting" and node.kind == "leaf"
+
+    async def release(self, node_id: UUID) -> None:
+        """Release a split claim when no child writes can be committed."""
+        if self.uow is None:
+            raise MissingUnitOfWork("Split requires a UnitOfWork")
+
+        source = await self.uow.nodes.get(node_id)
+        if source is None or source.kind != "leaf" or source.status != "splitting":
+            await self.uow.rollback()
+            return
+
+        docs = await self.uow.docs.leaf(node_id)
+        source.status = "active"
+        source.doc_count = len(docs)
+        await self.uow.nodes.save(source)
+        await self.uow.commit()
 
     def validate(self, plan: SplitPlan, docs: list[Document]) -> list[ChildPlan]:
         """Validate an untrusted split plan against current local documents."""

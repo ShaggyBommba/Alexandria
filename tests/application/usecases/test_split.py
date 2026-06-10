@@ -61,11 +61,14 @@ class FakeFullness:
 
 
 class FakeSplitter:
-    def __init__(self, plan: SplitPlan) -> None:
+    def __init__(self, plan: SplitPlan, events: list[str] | None = None) -> None:
         self.plan = plan
+        self.events = events
         self.calls: list[tuple[Node, list[Document]]] = []
 
     async def split(self, node: Node, docs: list[Document]) -> SplitPlan:
+        if self.events is not None:
+            self.events.append("split")
         self.calls.append((node, docs))
         return self.plan
 
@@ -76,6 +79,7 @@ class FakeNodes:
         self.events = events
         self.added: list[Node] = []
         self.saved: list[Node] = []
+        self.saved_states: list[tuple[str, str, int]] = []
 
     async def get(self, id: UUID) -> Node | None:
         self.events.append("get_node")
@@ -91,6 +95,7 @@ class FakeNodes:
     async def save(self, item: Node) -> None:
         self.events.append("save_node")
         self.saved.append(item)
+        self.saved_states.append((item.kind, item.status, item.doc_count))
 
 
 class FakeDocs:
@@ -149,7 +154,7 @@ def make_case(
     source = node(1)
     docs = [doc(10, source), doc(11, source), doc(12, source)]
     uow = FakeUow(source, docs, events)
-    splitter = FakeSplitter(plan)
+    splitter = FakeSplitter(plan, events)
     case = Split(uow=uow, splitter=splitter, fullness=FakeFullness(threshold))
     return case, uow, splitter, source, docs, events
 
@@ -242,9 +247,16 @@ async def test_split_rejects_invalid_plans_before_writes(
     assert uow.nodes.added == []
     assert uow.docs.moves == []
     assert uow.refs.cleared == []
-    assert uow.nodes.saved == []
-    assert uow.commits == 0
-    assert uow.rollbacks == 2
+    assert source.status == "active"
+    assert source.kind == "leaf"
+    assert source.doc_count == 3
+    assert uow.nodes.saved == [source, source]
+    assert uow.nodes.saved_states == [
+        ("leaf", "splitting", 3),
+        ("leaf", "active", 3),
+    ]
+    assert uow.commits == 2
+    assert uow.rollbacks == 0
 
 
 @pytest.mark.asyncio
@@ -266,6 +278,7 @@ async def test_split_creates_children_moves_documents_and_updates_source() -> No
     split_source, split_docs = splitter.calls[0]
     assert split_source.id == source.id
     assert split_source.kind == "leaf"
+    assert split_source.status == "active"
     assert [item.id for item in split_docs] == [uid(10), uid(11), uid(12)]
 
     assert len(uow.nodes.added) == 2
@@ -294,12 +307,18 @@ async def test_split_creates_children_moves_documents_and_updates_source() -> No
     assert source.doc_count == 0
     assert source.version == 2
     assert uow.refs.cleared == [source.id]
-    assert uow.nodes.saved == [source]
-    assert uow.commits == 1
+    assert uow.nodes.saved == [source, source]
+    assert uow.nodes.saved_states == [
+        ("leaf", "splitting", 3),
+        ("branch", "active", 0),
+    ]
+    assert uow.commits == 2
     assert events == [
         "get_node",
         "leaf_docs",
-        "rollback",
+        "save_node",
+        "commit",
+        "split",
         "get_node",
         "leaf_docs",
         "add_node",
