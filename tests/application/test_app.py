@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from application.app import App
 from infrastructure.config import IngestSettings, Settings
 
@@ -72,9 +74,34 @@ class FakeEmbedder:
         return [len(text)]
 
 
+class DeferredSummarizer:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def summarize(self, _doc) -> str:
+        self.calls.append("summarize")
+        return "ok"
+
+
 class FakeSummarizer:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
     async def summarize(self, doc) -> str:
+        self.calls.append("summarize")
         return f"summary:{doc.body}"
+
+
+class MockDoc:
+    def __init__(self) -> None:
+        self.name = "doc"
+        self.body = "body"
+        self.source_key = "source"
+
+
+class FakeSummarizerWrapper:
+    def __init__(self, target) -> None:
+        self.target = target
 
 
 
@@ -83,7 +110,8 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(monkeypatc
     import application.app as app_module
 
     fake_db = FakeDb(Settings())
-    fake_summarizer = FakeSummarizer()
+    factory_calls: list[str] = []
+    deferred_summarizer = DeferredSummarizer()
 
     monkeypatch.setattr(app_module, "Db", lambda settings: fake_db)
     monkeypatch.setattr(app_module, "NodeRepo", FakeNodeRepo)
@@ -91,7 +119,12 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(monkeypatc
     monkeypatch.setattr(app_module, "SqlSearch", FakeSqlSearch)
     monkeypatch.setattr(app_module, "SqlUnitOfWork", FakeSqlUnitOfWork)
     monkeypatch.setattr(app_module, "make_embedder", lambda provider, settings: FakeEmbedder())
-    monkeypatch.setattr(app_module, "make_summarizer", lambda settings: fake_summarizer)
+
+    def make_summarizer_factory(_provider, _settings):
+        factory_calls.append("called")
+        return deferred_summarizer
+
+    monkeypatch.setattr(app_module, "make_summarizer", make_summarizer_factory)
 
     # Act
     settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=7))
@@ -112,17 +145,49 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(monkeypatc
     assert isinstance(app.uow, FakeSqlUnitOfWork)
     assert app.uow.received_sessions is fake_db.unit_of_work_session_factory
     assert app.uow.received_queue == settings.queue
+    assert app.queue is app.outbox is app.uow.outbox
+
     assert app.seed_case.uow is app.uow
     assert app.route_case.nodes is app.nodes
     assert app.ingest_case.uow is app.uow
-    assert app.ingest_case.summarizer is fake_summarizer
-    assert app.ingest_case.max_leaf_docs == 7
-    assert app.ingest_case.seed is app.seed_case
     assert app.ingest_case.route is app.route_case
+    assert app.ingest_case.summarizer is app.summarizer
+    assert app.ingest_case.seed is app.seed_case
+    assert app.ingest_case.max_leaf_docs == 7
+    assert app.ingest_case.summarizer is app.summarizer
     assert app.retrieve_case.route is app.route_case
     assert app.retrieve_case.refs is app.refs_repo
     assert app.retrieve_case.search is app.search
+    assert app.retrieve_case.embedder is app.embedder
+    assert app.rerank_case is app.retrieve_case.rerank
     assert app.refs_case.uow is app.uow
     assert app.lint_case.uow is app.uow
     assert app.lint_case.split is app.split_case
     assert app.split_case.uow is app.uow
+    assert factory_calls == []
+
+
+@pytest.mark.asyncio
+async def test_app_constructs_summarizer_on_first_use(monkeypatch) -> None:
+    # Arrange
+    import application.app as app_module
+
+    fake_db = FakeDb(Settings())
+    deferred = DeferredSummarizer()
+
+    monkeypatch.setattr(app_module, "Db", lambda settings: fake_db)
+    monkeypatch.setattr(app_module, "NodeRepo", FakeNodeRepo)
+    monkeypatch.setattr(app_module, "ReferenceRepo", FakeReferenceRepo)
+    monkeypatch.setattr(app_module, "SqlSearch", FakeSqlSearch)
+    monkeypatch.setattr(app_module, "SqlUnitOfWork", FakeSqlUnitOfWork)
+    monkeypatch.setattr(app_module, "make_embedder", lambda provider, settings: FakeEmbedder())
+    monkeypatch.setattr(app_module, "make_summarizer", lambda _provider, _settings: deferred)
+
+    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=7))
+    app = App(settings)
+
+    # Act
+    await app.summarizer.summarize(MockDoc())
+
+    # Assert
+    assert deferred.calls == ["summarize"]

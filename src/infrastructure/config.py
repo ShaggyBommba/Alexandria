@@ -61,6 +61,22 @@ class EmbeddingSettings(BaseModel):
     timeout_seconds: float = Field(default=30.0, gt=0)
 
 
+class SummarizerProvider(StrEnum):
+    """Supported summarization provider adapters."""
+
+    OPENAI = "openai"
+
+
+class SummarizerSettings(BaseModel):
+    """Configuration for a chat-model summarization endpoint."""
+
+    provider: SummarizerProvider = SummarizerProvider.OPENAI
+    base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
+    api_key: str | None = None
+    model: str = Field(default="gpt-4o-mini", min_length=1)
+    timeout_seconds: float = Field(default=30.0, gt=0)
+
+
 class SQLSettings(BaseModel):
     """Configuration for the database used by repositories."""
 
@@ -85,6 +101,7 @@ class Settings(BaseSettings):
     queue: QueueSettings = Field(default_factory=QueueSettings)
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
+    summarizer: SummarizerSettings = Field(default_factory=SummarizerSettings)
 
     model_config = SettingsConfigDict(
         env_prefix="ALEXANDRIA_",

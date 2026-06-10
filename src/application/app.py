@@ -1,7 +1,7 @@
 from functools import lru_cache
 from uuid import UUID
 
-from application.ports import DocHit, DocIn, NodeHit, Summarizer
+from application.ports import DocHit, DocIn, NodeHit
 from domain.entity import Node
 from application.usecases.ingest import Ingest
 from application.usecases.lint import Lint
@@ -12,6 +12,7 @@ from application.usecases.route import Route
 from application.usecases.seed import Seed
 from application.usecases.split import Split
 from infrastructure.config import Settings, get_settings
+from infrastructure.agents.summarizer import LazySummarizer, make_summarizer
 from infrastructure.embeddings import make_embedder
 from infrastructure.persistence.db import Db
 from infrastructure.persistence.unit_of_work import SqlUnitOfWork
@@ -21,18 +22,6 @@ from infrastructure.repositories.references import ReferenceRepo
 from infrastructure.search import SqlSearch
 from logging import getLogger
 
-
-class _PlaceholderSummarizer:
-    """Local fallback summarizer while summary provider configuration is pending."""
-
-    async def summarize(self, doc: DocIn) -> str:
-        return doc.body
-
-
-def make_summarizer(_settings: Settings) -> Summarizer:
-    """Return a configured summarizer when available, otherwise use a placeholder."""
-
-    return _PlaceholderSummarizer()
 
 logging = getLogger(__name__)
 
@@ -53,7 +42,9 @@ class App:
         self.uow = SqlUnitOfWork(self.sessions, settings.queue)
 
         self.embedder = make_embedder(settings.embedding.provider, settings.embedding)
-        self.summarizer = make_summarizer(settings)
+        self.summarizer = LazySummarizer(
+            lambda: make_summarizer(settings.summarizer.provider, settings.summarizer)
+        )
         self.queue = self.uow.outbox
         self.outbox = self.uow.outbox
 
@@ -106,7 +97,7 @@ class App:
         # Route the document to candidate leaves and attach it to the chosen leaf.
         # Queue a split-check job when the chosen leaf becomes full.
         return await self.ingest_case.run(doc)
-    
+
     async def lint(self, node_id: UUID) -> None:
         """Run split evaluation for a linked entity."""
         # Reload the queued node after the worker claims the split-check job.

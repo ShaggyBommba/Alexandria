@@ -171,7 +171,8 @@ Current concrete adapters for these ports:
   `Settings.embedding`, and wired into `App` for `Ingest` and `Retrieve`.
 - `LangSummarizer` in `src/infrastructure/agents/summarizer.py` implements
   `Summarizer` through a LangChain chat model and structured response
-  validation. It is not wired into `App` yet.
+  validation. It is wired into `App` through a deferred construction path, so
+  summarizer configuration is validated when the adapter is first used.
 - `SqlSearch` in `src/infrastructure/search.py` implements `Search` through a
   scoped SQL document lookup and deterministic in-process vector scoring. It
   populates vector distance and leaves `bm25` empty until lexical scoring lands.
