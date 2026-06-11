@@ -11,7 +11,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, SecretStr
 
 from application.ports import ChildPlan, SplitPlan
 from application.ports import Splitter as SplitterPort
@@ -170,9 +170,10 @@ def make_splitter(
         return None
 
     if provider is SplitterProvider.OPENAI:
-        api_key = (settings.api_key or "").strip()
+        api_key = settings.api_key or SecretStr("OPENAI_API_KEY")
         if not api_key:
             raise SplitterConfigError("splitter provider openai requires an api_key")
+        
         return LangSplitter(
             client=ChatOpenAI(
                 api_key=api_key,
@@ -181,5 +182,4 @@ def make_splitter(
                 timeout=settings.timeout_seconds,
             ),
         )
-
     raise SplitterConfigError(f"unsupported splitter provider: {provider}")

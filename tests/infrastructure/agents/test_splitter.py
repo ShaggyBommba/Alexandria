@@ -8,7 +8,7 @@ from application.ports import Splitter
 from domain.entity import Document, Node
 from infrastructure.agents.splitter import LangSplitter, make_splitter
 from infrastructure.config import SplitterProvider, SplitterSettings
-from infrastructure.exceptions import SplitterConfigError, SplitterResponseError
+from infrastructure.exceptions import SplitterResponseError
 
 
 class FakeAgent:
@@ -141,11 +141,23 @@ def test_splitter_factory_returns_none_when_disabled() -> None:
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])
-def test_splitter_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
+def test_splitter_factory_defers_missing_or_blank_api_key(
+    value: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = SplitterSettings(provider=SplitterProvider.OPENAI, api_key=value)
+    captured: dict[str, object] = {}
 
-    with pytest.raises(SplitterConfigError, match="requires an api_key"):
-        make_splitter(SplitterProvider.OPENAI, settings)
+    class FakeOpenAIClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("infrastructure.agents.splitter.ChatOpenAI", FakeOpenAIClient)
+
+    splitter = make_splitter(SplitterProvider.OPENAI, settings)
+
+    assert isinstance(splitter, LangSplitter)
+    assert hasattr(captured["api_key"], "get_secret_value")
 
 
 def test_splitter_factory_constructs_lang_splitter_for_openai(
@@ -163,5 +175,5 @@ def test_splitter_factory_constructs_lang_splitter_for_openai(
     splitter = make_splitter(SplitterProvider.OPENAI, settings)
 
     assert isinstance(splitter, LangSplitter)
-    assert captured["api_key"] == "test-key"
+    assert captured["api_key"].get_secret_value() == "test-key"
     assert captured["model"] == "gpt-4o-mini"

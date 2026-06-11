@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -88,10 +88,10 @@ class SplitterProvider(StrEnum):
 
 class SplitterSettings(BaseModel):
     """Configuration for an optional chat-model splitter endpoint."""
-
+    
     provider: SplitterProvider = SplitterProvider.NONE
     base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     model: str = Field(default="gpt-4o-mini", min_length=1)
     timeout_seconds: float = Field(default=30.0, gt=0)
 
