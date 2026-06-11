@@ -89,6 +89,7 @@ class LangRanker:
             result = self.parsed(output)
         except RankerResponseError:
             raise
+    
         except Exception as exc:
             raise RankerError(f"Ranker agent execution failed: {exc}") from exc
 

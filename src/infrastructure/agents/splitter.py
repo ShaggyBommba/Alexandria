@@ -109,7 +109,7 @@ class LangSplitter:
             node_id=str(node.id),
             name=node.name,
             description=node.description,
-            documents=document_context(docs),
+            documents=document(docs),
         )
 
         try:
@@ -144,7 +144,7 @@ class LangSplitter:
             ) from exc
 
 
-def document_context(docs: list[Document]) -> str:
+def document(docs: list[Document]) -> str:
     """Return deterministic document context for the splitter prompt."""
     lines: list[str] = []
     for doc in sorted(docs, key=lambda item: str(item.id)):

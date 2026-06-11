@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 
 from application.ports import Search as SearchPort
 from domain.entity import Base, Document, Node, Reference, VECTOR_DIMENSIONS
-from infrastructure.search import SqlSearch
+from infrastructure.search import (
+    HybridSearch,
+    LexicalSearch,
+    SearchPolicy,
+    SqlSearch,
+    VectorSearch,
+)
 
 
 @pytest.fixture
@@ -63,14 +69,21 @@ def doc(
     )
 
 
-def search(session: Session) -> SqlSearch:
-    return SqlSearch(session)
+def search(session: Session, policy: SearchPolicy | None = None) -> SqlSearch:
+    return SqlSearch(session, policy)
 
 
 def test_sql_search_satisfies_port(search_session) -> None:
     docs = search(search_session)
 
     assert isinstance(docs, SearchPort)
+    assert isinstance(docs.policy, HybridSearch)
+
+
+def test_search_policies_satisfy_policy_interface() -> None:
+    assert isinstance(HybridSearch(), SearchPolicy)
+    assert isinstance(VectorSearch(), SearchPolicy)
+    assert isinstance(LexicalSearch(), SearchPolicy)
 
 
 @pytest.mark.asyncio
@@ -149,12 +162,19 @@ async def test_find_populates_bm25_and_combines_lexical_with_vector_scores(
         summary="Unrelated memo",
         body="No matching search terms here.",
     )
-    search_session.add_all([leaf, vector_only, lexical])
+    unrelated = doc(
+        4,
+        leaf,
+        embedding=vector(0.0, 0.0, 1.0),
+        summary="Background memo",
+        body="Durable jobs and outbox state.",
+    )
+    search_session.add_all([leaf, vector_only, lexical, unrelated])
     search_session.flush()
 
     result = await docs.find("alpha routing", vector(1.0, 0.0), {leaf.id}, limit=10)
 
-    assert [hit.doc.id for hit in result] == [lexical.id, vector_only.id]
+    assert [hit.doc.id for hit in result[:2]] == [lexical.id, vector_only.id]
     assert result[0].bm25 is not None
     assert result[0].bm25 > 0
     assert result[0].distance == pytest.approx(1.0)
@@ -179,3 +199,67 @@ async def test_find_uses_document_id_tie_breaker_and_applies_limit(
     result = await docs.find("query", vector(1.0, 0.0), {leaf.id}, limit=2)
 
     assert [hit.doc.id for hit in result] == [first_tie.id, later_tie.id]
+
+
+@pytest.mark.asyncio
+async def test_vector_search_policy_scores_without_lexical_components(
+    search_session,
+) -> None:
+    docs = search(search_session, VectorSearch())
+    leaf = node(1)
+    exact = doc(2, leaf, embedding=vector(1.0, 0.0))
+    orthogonal = doc(3, leaf, embedding=vector(0.0, 1.0))
+    search_session.add_all([leaf, orthogonal, exact])
+    search_session.flush()
+
+    result = await docs.find("query", vector(1.0, 0.0), {leaf.id}, limit=10)
+
+    assert [hit.doc.id for hit in result] == [exact.id, orthogonal.id]
+    assert result[0].score == pytest.approx(1.0)
+    assert result[0].distance == pytest.approx(0.0)
+    assert result[0].bm25 is None
+    assert result[1].score == pytest.approx(0.0)
+    assert result[1].distance == pytest.approx(1.0)
+    assert result[1].bm25 is None
+
+
+@pytest.mark.asyncio
+async def test_lexical_search_policy_scores_without_vector_components(
+    search_session,
+) -> None:
+    docs = search(search_session, LexicalSearch())
+    leaf = node(1)
+    lexical = doc(
+        2,
+        leaf,
+        embedding=vector(0.0, 1.0),
+        summary="Alpha routing memo",
+        body="Alpha routing keeps lexical matches visible.",
+    )
+    vector_only = doc(
+        3,
+        leaf,
+        embedding=vector(1.0, 0.0),
+        summary="Unrelated memo",
+        body="No matching search terms here.",
+    )
+    unrelated = doc(
+        4,
+        leaf,
+        embedding=vector(0.0, 0.0, 1.0),
+        summary="Background memo",
+        body="Durable jobs and outbox state.",
+    )
+    search_session.add_all([leaf, vector_only, lexical, unrelated])
+    search_session.flush()
+
+    result = await docs.find("alpha routing", vector(1.0, 0.0), {leaf.id}, limit=10)
+
+    assert [hit.doc.id for hit in result[:2]] == [lexical.id, vector_only.id]
+    assert result[0].score == pytest.approx(1.0)
+    assert result[0].distance is None
+    assert result[0].bm25 is not None
+    assert result[0].bm25 > 0
+    assert result[1].score == pytest.approx(0.0)
+    assert result[1].distance is None
+    assert result[1].bm25 == pytest.approx(0.0)

@@ -188,10 +188,12 @@ Current concrete adapters for these ports:
   unknown or duplicate document ids, and can be injected or configured without
   changing retrieval workflow decisions.
 - `SqlSearch` in `src/infrastructure/search.py` implements `Search` through a
-  scoped SQL document lookup and deterministic in-process hybrid scoring. It
-  tokenizes query, document body, and summary text for BM25-style lexical
-  scoring, stores the raw lexical value in `DocHit.bm25`, combines normalized
-  lexical score with clamped vector similarity, and tie-breaks deterministically.
+  scoped SQL document lookup and a pluggable in-process `SearchPolicy`.
+  `HybridSearch` is the default policy and combines normalized BM25 with
+  clamped vector similarity. `VectorSearch` scores only by embedding distance,
+  and `LexicalSearch` scores only by BM25 over document body and summary.
+  Policies return stable `DocHit` ordering and populate score components they
+  know.
 
 Current repository and transaction ports:
 

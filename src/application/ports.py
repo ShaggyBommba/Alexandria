@@ -9,6 +9,16 @@ from uuid import UUID
 from domain.entity import Document, Job, Node, Reference
 from domain.values import JobKind, JobStatus
 
+@runtime_checkable
+class SearchPolicy(Protocol):
+    """Scores scoped documents for one query."""
+
+    def score(
+        self,
+        query: str,
+        embedding: list[float],
+        docs: list[Document],
+    ) -> list[DocHit]: ...
 
 @dataclass(frozen=True)
 class NodeHit:
