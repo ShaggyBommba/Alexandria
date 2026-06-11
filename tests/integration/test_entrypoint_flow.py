@@ -142,7 +142,7 @@ def test_api_public_boundary_ingests_and_retrieves_local_documents(
     assert [hit["name"] for hit in payload["hits"]] == ["Alpha", "Beta"]
     assert payload["hits"][0]["score"] == 1.0
     assert payload["hits"][0]["distance"] == 0.0
-    assert payload["hits"][0]["bm25"] is None
+    assert payload["hits"][0]["bm25"] > 0
 
     assert "alpha retrieval query" in embedder.calls
     assert summarizer.calls == [

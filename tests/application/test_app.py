@@ -118,6 +118,11 @@ class FakeSplitter:
         return SplitPlan(children=[])
 
 
+class FakeRanker:
+    async def rank(self, _query, hits, limit):
+        return hits[:limit]
+
+
 def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     monkeypatch,
 ) -> None:
@@ -176,6 +181,7 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     assert app.retrieve_case.search is app.search
     assert app.retrieve_case.embedder is app.embedder
     assert app.rerank_case is app.retrieve_case.rerank
+    assert app.rerank_case.ranker is None
     assert app.refs_case.uow is app.uow
     assert app.lint_case.uow is app.uow
     assert app.lint_case.split is app.split_case
@@ -219,12 +225,13 @@ async def test_app_constructs_summarizer_on_first_use(monkeypatch) -> None:
     assert deferred.calls == ["summarize"]
 
 
-def test_app_accepts_splitter_and_fullness_injection(monkeypatch) -> None:
+def test_app_accepts_splitter_ranker_and_fullness_injection(monkeypatch) -> None:
     # Arrange
     import application.app as app_module
 
     fake_db = FakeDb(Settings())
     splitter = FakeSplitter()
+    ranker = FakeRanker()
     fullness = FakeFullness()
 
     monkeypatch.setattr(app_module, "Db", lambda settings: fake_db)
@@ -240,10 +247,17 @@ def test_app_accepts_splitter_and_fullness_injection(monkeypatch) -> None:
     )
 
     # Act
-    app = App(Settings(_env_file=None), splitter=splitter, fullness=fullness)
+    app = App(
+        Settings(_env_file=None),
+        splitter=splitter,
+        ranker=ranker,
+        fullness=fullness,
+    )
 
     # Assert
     assert app.splitter is splitter
+    assert app.ranker is ranker
+    assert app.rerank_case.ranker is ranker
     assert app.fullness is fullness
     assert app.split_case.splitter is splitter
     assert app.split_case.fullness is fullness

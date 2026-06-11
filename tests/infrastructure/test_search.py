@@ -45,13 +45,20 @@ def node(value: int) -> Node:
     )
 
 
-def doc(value: int, leaf: Node, *, embedding: list[float]) -> Document:
+def doc(
+    value: int,
+    leaf: Node,
+    *,
+    embedding: list[float],
+    summary: str | None = None,
+    body: str | None = None,
+) -> Document:
     return Document(
         id=uid(value),
         leaf=leaf,
         name=f"Doc {value}",
-        summary=f"Summary {value}",
-        body=f"Body {value}",
+        summary=summary or f"Summary {value}",
+        body=body or f"Body {value}",
         embedding=embedding,
     )
 
@@ -115,11 +122,46 @@ async def test_find_populates_vector_scores_and_orders_best_first(
 
     assert [hit.doc.id for hit in result] == [exact.id, orthogonal.id]
     assert result[0].distance == pytest.approx(0.0)
-    assert result[0].score == pytest.approx(1.0)
-    assert result[0].bm25 is None
+    assert result[0].score == pytest.approx(0.4)
+    assert result[0].bm25 == pytest.approx(0.0)
     assert result[1].distance == pytest.approx(1.0)
     assert result[1].score == pytest.approx(0.0)
-    assert result[1].bm25 is None
+    assert result[1].bm25 == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_find_populates_bm25_and_combines_lexical_with_vector_scores(
+    search_session,
+) -> None:
+    docs = search(search_session)
+    leaf = node(1)
+    lexical = doc(
+        2,
+        leaf,
+        embedding=vector(0.0, 1.0),
+        summary="Alpha routing memo",
+        body="Alpha routing keeps lexical matches visible.",
+    )
+    vector_only = doc(
+        3,
+        leaf,
+        embedding=vector(1.0, 0.0),
+        summary="Unrelated memo",
+        body="No matching search terms here.",
+    )
+    search_session.add_all([leaf, vector_only, lexical])
+    search_session.flush()
+
+    result = await docs.find("alpha routing", vector(1.0, 0.0), {leaf.id}, limit=10)
+
+    assert [hit.doc.id for hit in result] == [lexical.id, vector_only.id]
+    assert result[0].bm25 is not None
+    assert result[0].bm25 > 0
+    assert result[0].distance == pytest.approx(1.0)
+    assert result[0].score == pytest.approx(0.6)
+    assert result[1].bm25 == pytest.approx(0.0)
+    assert result[1].distance == pytest.approx(0.0)
+    assert result[1].score == pytest.approx(0.4)
 
 
 @pytest.mark.asyncio
