@@ -12,8 +12,9 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from application.app import App
-from infrastructure.config import get_settings
 from domain.exceptions import BaseError
+from infrastructure.config import get_settings
+from infrastructure.observability.logger import LoggingService
 from presentation.contracts import (
     IngestRequest,
     IngestResponse,
@@ -59,7 +60,11 @@ def validation_detail(exc: ValidationError) -> list[dict[str, object]]:
 
 
 def api(app: App | None = None) -> FastAPI:
-    settings = get_settings()
+    if app is None:
+        settings = get_settings()
+    else:
+        settings = app.settings
+    LoggingService.setup(settings.logging)
 
     api = FastAPI(
         title="alexandria-parser",
