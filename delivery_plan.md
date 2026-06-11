@@ -32,25 +32,31 @@ A delivery is accepted when all of these are true:
 
 ## Current Product Baseline
 
-Already present or partially present:
+Already present:
 
 - SQLAlchemy shared-kernel entities for nodes, documents, references, and jobs.
 - Repositories for nodes, documents, references, and outbox.
 - Persistence `Db` and `SqlUnitOfWork`.
 - Application ports and result shapes.
-- Implemented `Seed`, `Route`, `Ingest`, `Refs`, `Retrieve`, and `Rerank`.
-- Deterministic `SqlSearch`.
-- OpenAI embedder adapter and LangChain summarizer adapter.
-- Worker shell for outbox jobs.
-- Health/version API shell, limited CLI shell, placeholder MCP shell.
+- Implemented `Seed`, `Route`, `Ingest`, `Refs`, `Retrieve`, `Rerank`,
+  `Lint`, and `Split`.
+- Deterministic hybrid `SqlSearch` with BM25-style lexical scoring and vector
+  similarity.
+- OpenAI-compatible embedder adapter and LangChain summarizer, splitter, and
+  ranker adapters.
+- Worker split-check payload validation and job handling.
+- API, CLI, and MCP workflow surfaces for ingest and retrieve.
+- Lightweight health/version metadata paths.
+- Deterministic integration smoke coverage through the full local lifecycle.
 
-Known gaps to close through deliveries:
+Known remaining gaps:
 
-- `Lint` and `Split` need a complete split-check workflow.
-- Worker split-check payload validation and job handling need tests.
-- API, CLI, and MCP need real workflow surfaces for ingest and retrieve.
-- Provider-backed splitter/ranker and BM25-style lexical scoring are incomplete.
-- End-to-end local setup, validation, and release documentation need hardening.
+- Production SLOs, hosted deployment, and cloud infrastructure are not defined.
+- Alembic-style migrations are not configured; local setup uses `create_all()`.
+- Live provider acceptance tests are not part of the default local validation
+  path.
+- No CI provider workflow file exists; `task test` is the documented local and
+  CI-equivalent command matrix.
 
 ## Delivery Dependency Graph
 
@@ -122,7 +128,7 @@ task test
 Delivery evidence:
 
 - `tests/integration/test_ingest_flow.py` demonstrates the milestone.
-- `/Users/jonasmeddeb/templates/alexandria/sandbox/01_ingest_smoke.ipynb` or a documented deterministic walkthrough shows the same flow.
+- `sandbox/01_ingest_smoke.ipynb` or a documented deterministic walkthrough shows the same flow.
 
 Not in scope:
 
@@ -288,7 +294,7 @@ Implementation slice:
 
 - Add API ingest and retrieve endpoints over `App`.
 - Add CLI ingest and retrieve commands over `App`.
-- Replace placeholder MCP behavior with workflow tools or explicitly defer MCP with docs.
+- Maintain MCP workflow tools for ingest and retrieve.
 - Validate request, CLI, and MCP inputs at the entrypoint boundary.
 - Translate application errors into transport-specific responses.
 - Add entrypoint smoke tests with fake app dependencies.
@@ -451,6 +457,7 @@ uv run pytest tests/application -q
 uv run pytest tests/infrastructure -q
 uv run pytest tests/entrypoints -q
 uv run pytest tests/integration -q
+uv run pytest tests/domain tests/test_scaffold.py -q
 task test
 ```
 
@@ -467,9 +474,9 @@ Not in scope:
 
 ## Notebook Convention
 
-Use a dedicated `sandbox/` directory for delivery walkthroughs; until Delivery 1 is mirrored into-repo, use:
+Use a dedicated `sandbox/` directory for delivery walkthroughs:
 
-- `/Users/jonasmeddeb/templates/alexandria/sandbox/01_ingest_smoke.ipynb` (current location)
+- `sandbox/01_ingest_smoke.ipynb`
 - `sandbox/02_retrieve_smoke.ipynb`
 - `sandbox/03_lint_split_smoke.ipynb`
 - `sandbox/04_entrypoints_smoke.ipynb`

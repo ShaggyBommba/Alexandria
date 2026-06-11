@@ -16,7 +16,7 @@ from infrastructure.config import Settings, get_settings
 from infrastructure.agents.ranker import make_ranker
 from infrastructure.agents.summarizer import LazySummarizer, make_summarizer
 from infrastructure.agents.splitter import make_splitter
-from infrastructure.embeddings import make_embedder
+from infrastructure.embeddings import LazyEmbedder, make_embedder
 from infrastructure.persistence.db import Db
 from infrastructure.persistence.unit_of_work import SqlUnitOfWork
 from infrastructure.observability.logger import LoggingService
@@ -62,7 +62,9 @@ class App:
         self.search = SqlSearch(self.session)
         self.uow = SqlUnitOfWork(self.sessions, settings.queue)
 
-        self.embedder = make_embedder(settings.embedding.provider, settings.embedding)
+        self.embedder = LazyEmbedder(
+            lambda: make_embedder(settings.embedding.provider, settings.embedding)
+        )
         self.summarizer = LazySummarizer(
             lambda: make_summarizer(settings.summarizer.provider, settings.summarizer)
         )

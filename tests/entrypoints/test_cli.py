@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from application.exceptions import AppError
 from application.ports import DocHit, DocIn
 from domain.entity import Document
+from infrastructure.config import Settings
 from infrastructure.exceptions import EmbedderClientError, SummarizerConfigError
 from presentation.cli import app as cli_module
 
@@ -62,6 +63,26 @@ class FakeApp:
 def run(app: FakeApp, args: list[str], monkeypatch):
     monkeypatch.setattr(cli_module, "get_app", lambda: app)
     return CliRunner().invoke(cli_module.cli, args)
+
+
+def test_cli_version_reads_settings_without_constructing_app(monkeypatch) -> None:
+    # Arrange
+    def explode():
+        raise AssertionError("version command constructed App")
+
+    monkeypatch.setattr(cli_module, "get_app", explode)
+    monkeypatch.setattr(
+        cli_module,
+        "get_settings",
+        lambda: Settings(_env_file=None),
+    )
+
+    # Act
+    result = CliRunner().invoke(cli_module.cli, ["version"])
+
+    # Assert
+    assert result.exit_code == 0
+    assert result.output.strip() == "0.1.0"
 
 
 def test_cli_ingest_prints_created_document_id(monkeypatch) -> None:

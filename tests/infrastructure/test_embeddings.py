@@ -11,6 +11,7 @@ from infrastructure.config import EmbeddingProvider, EmbeddingSettings
 from infrastructure.embeddings import OpenAIEmbedder, make_embedder
 from infrastructure.exceptions import (
     EmbedderClientError,
+    EmbedderConfigError,
     EmbedderRequestError,
     EmbedderResponseError,
 )
@@ -104,7 +105,7 @@ async def test_embedder_omits_dimensions_when_not_configured() -> None:
 
 def test_factory_returns_openai_embedder_for_provider_enum() -> None:
     # Arrange
-    settings = EmbeddingSettings(provider=EmbeddingProvider.OPENAI)
+    settings = EmbeddingSettings(provider=EmbeddingProvider.OPENAI, api_key="test-key")
 
     # Act
     embedder = make_embedder(EmbeddingProvider.OPENAI, settings)
@@ -112,6 +113,14 @@ def test_factory_returns_openai_embedder_for_provider_enum() -> None:
     # Assert
     assert isinstance(embedder, OpenAIEmbedder)
     assert isinstance(embedder, EmbedderPort)
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
+    settings = EmbeddingSettings(provider=EmbeddingProvider.OPENAI, api_key=value)
+
+    with pytest.raises(EmbedderConfigError, match="requires an api_key"):
+        make_embedder(EmbeddingProvider.OPENAI, settings)
 
 
 @pytest.mark.asyncio

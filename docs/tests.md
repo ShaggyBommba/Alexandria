@@ -48,7 +48,7 @@ Do not leave real implemented behavior skipped without a clear reason.
 
 ## Running Tests
 
-Use:
+For quick local iteration, use:
 
 ```bash
 uv run pytest
@@ -60,13 +60,24 @@ For evaluation, always run:
 task test
 ```
 
-`task test` must execute both validation checks and pytest.
+`task test` must execute the local and CI-equivalent validation matrix:
+
+```bash
+task lint
+uv run pytest --collect-only -q
+uv run pytest tests/application -q
+uv run pytest tests/infrastructure -q
+uv run pytest tests/entrypoints -q
+uv run pytest tests/integration -q
+uv run pytest tests/domain tests/test_scaffold.py -q
+```
 
 Useful focused commands:
 
 ```bash
 uv run pytest --collect-only -q
 uv run pytest tests/application -q
+uv run pytest tests/integration/test_end_to_end_flow.py -q
 uv run pytest -k behavior_name -q
 ```
 
@@ -208,6 +219,9 @@ Integration tests:
 - prove collaborations across layers
 - keep them fewer than unit tests
 - prefer memory/local mode unless the behavior specifically concerns durability
+- keep default integration tests deterministic and fake external providers
+- use `tests/integration/test_end_to_end_flow.py` for the full local lifecycle:
+  seed, ingest, retrieve, worker split-check processing, and retrieve again
 
 Architecture tests:
 
@@ -231,6 +245,10 @@ Preferred shape:
 
 Use real configured infrastructure for complete smoke checks. Use fakes only in
 unit tests or in clearly labeled deterministic scratch checks.
+
+`sandbox/06_end_to_end.ipynb` is the deterministic walkthrough equivalent of
+the automated end-to-end integration smoke. Provider-backed notebooks must
+state their external service and credential requirements explicitly.
 
 ## Naming
 

@@ -11,9 +11,10 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from application.app import App, get_app
-from infrastructure.config import get_settings
+from application.app import App
 from domain.exceptions import BaseError
+from infrastructure.config import get_settings
+from infrastructure.observability.logger import LoggingService
 from presentation.contracts import (
     IngestRequest,
     IngestResponse,
@@ -27,9 +28,7 @@ logger = getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(api: FastAPI) -> AsyncGenerator[None, None]:
-    """Handles initialization and cleanup logic for the API lifecycle."""
-    if getattr(api.state, "app", None) is None:
-        api.state.app = get_app()
+    """Keep API startup lightweight; workflow routes create scoped apps."""
     yield
 
 
@@ -61,7 +60,11 @@ def validation_detail(exc: ValidationError) -> list[dict[str, object]]:
 
 
 def api(app: App | None = None) -> FastAPI:
-    settings = get_settings()
+    if app is None:
+        settings = get_settings()
+    else:
+        settings = app.settings
+    LoggingService.setup(settings.logging)
 
     api = FastAPI(
         title="alexandria-parser",
@@ -75,13 +78,14 @@ def api(app: App | None = None) -> FastAPI:
 
     @api.get("/health")
     def health(request: Request) -> dict[str, bool]:
-        app: App = request.app.state.app
-        return {"healthy": app.health}
+        app: App | None = request.app.state.app
+        return {"healthy": app.health if app is not None else True}
 
     @api.get("/version")
     def version(request: Request) -> dict[str, str]:
-        app: App = request.app.state.app
-        return {"version": app.version}
+        app: App | None = request.app.state.app
+        settings = request.app.state.settings
+        return {"version": app.version if app is not None else settings.app.app_version}
 
     @api.post("/ingest", response_model=IngestResponse)
     async def ingest(

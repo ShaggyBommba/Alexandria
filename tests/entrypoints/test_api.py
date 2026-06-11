@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from application.exceptions import AppError
 from application.ports import DocHit, DocIn
-from infrastructure.config import Settings
+from infrastructure.config import LoggingSettings, Settings
 from infrastructure.exceptions import EmbedderClientError, SummarizerConfigError
 from domain.entity import Document
 from presentation.api import app as api_module
@@ -38,11 +38,22 @@ def hit() -> DocHit:
     )
 
 
+def make_test_settings() -> Settings:
+    return Settings(
+        _env_file=None,
+        logging=LoggingSettings(
+            file_handler_enabled=False,
+            stream_handler_enabled=False,
+        ),
+    )
+
+
 class FakeApp:
     health = True
     version = "test-version"
 
     def __init__(self) -> None:
+        self.settings = make_test_settings()
         self.ingest_calls: list[DocIn] = []
         self.retrieve_calls: list[tuple[str, int]] = []
         self.ingest_error: Exception | None = None
@@ -73,6 +84,26 @@ def test_api_keeps_health_and_version_working() -> None:
     with client(app) as item:
         assert item.get("/health").json() == {"healthy": True}
         assert item.get("/version").json() == {"version": "test-version"}
+
+
+def test_api_metadata_routes_do_not_construct_workflow_app(monkeypatch) -> None:
+    # Arrange
+    settings = make_test_settings()
+    logging_calls: list[LoggingSettings] = []
+
+    class ExplodingApp:
+        def __init__(self, _settings: Settings) -> None:
+            raise AssertionError("metadata route constructed App")
+
+    monkeypatch.setattr(api_module, "App", ExplodingApp)
+    monkeypatch.setattr(api_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(api_module.LoggingService, "setup", logging_calls.append)
+
+    # Act / Assert
+    with TestClient(api_module.api()) as item:
+        assert item.get("/health").json() == {"healthy": True}
+        assert item.get("/version").json() == {"version": "0.1.0"}
+    assert logging_calls == [settings.logging]
 
 
 def test_api_ingest_validates_and_calls_app_with_doc_in() -> None:
@@ -197,10 +228,6 @@ def test_api_uses_request_scoped_apps_for_real_workflows(monkeypatch) -> None:
     # Arrange
     instances: list[ScopedApp] = []
 
-    class HealthApp:
-        health = True
-        version = "test-version"
-
     class ScopedApp(FakeApp):
         def __init__(self, settings: Settings) -> None:
             super().__init__()
@@ -211,8 +238,8 @@ def test_api_uses_request_scoped_apps_for_real_workflows(monkeypatch) -> None:
         def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(api_module, "get_app", lambda: HealthApp())
     monkeypatch.setattr(api_module, "App", ScopedApp)
+    monkeypatch.setattr(api_module, "get_settings", make_test_settings)
 
     # Act
     with TestClient(api_module.api()) as item:

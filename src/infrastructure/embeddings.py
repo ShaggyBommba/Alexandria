@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from logging import getLogger
 from typing import Protocol
 
@@ -39,8 +40,11 @@ class OpenAIEmbedder:
         client: OpenAIClient | None = None,
     ) -> None:
         self.settings = settings
+        api_key = (settings.api_key or "").strip()
+        if client is None and not api_key:
+            raise EmbedderConfigError("embedding provider openai requires an api_key")
         self.client = client or AsyncOpenAI(
-            api_key=settings.api_key or "not-needed",
+            api_key=api_key,
             base_url=settings.base_url,
             timeout=settings.timeout_seconds,
         )
@@ -92,6 +96,19 @@ class OpenAIEmbedder:
                 f"expected {self.settings.dimensions}"
             )
             raise EmbedderResponseError(message)
+
+
+class LazyEmbedder:
+    """Defer embedder construction until embeddings are first requested."""
+
+    def __init__(self, factory: Callable[[], EmbedderPort]) -> None:
+        self._factory = factory
+        self._instance: EmbedderPort | None = None
+
+    async def embed(self, text: str) -> list[float]:
+        if self._instance is None:
+            self._instance = self._factory()
+        return await self._instance.embed(text)
 
 
 def make_embedder(
