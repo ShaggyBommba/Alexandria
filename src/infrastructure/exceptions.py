@@ -29,6 +29,46 @@ class SummarizerConfigError(SummarizerError):
     retryable = False
 
 
+class SplitterError(AgentError):
+    """Base class for expected splitter adapter errors."""
+
+    code = "infra.splitter.error"
+
+
+class SplitterConfigError(SplitterError):
+    """Raised when splitter settings are incomplete or invalid."""
+
+    code = "infra.splitter.config"
+    retryable = False
+
+
+class SplitterResponseError(SplitterError):
+    """Raised when a splitter provider returns unusable data."""
+
+    code = "infra.splitter.response"
+    retryable = False
+
+
+class RankerError(AgentError):
+    """Base class for expected ranker adapter errors."""
+
+    code = "infra.ranker.error"
+
+
+class RankerConfigError(RankerError):
+    """Raised when ranker settings are incomplete or invalid."""
+
+    code = "infra.ranker.config"
+    retryable = False
+
+
+class RankerResponseError(RankerError):
+    """Raised when a ranker provider returns unusable data."""
+
+    code = "infra.ranker.response"
+    retryable = False
+
+
 class EmbedderError(InfraError):
     """Base class for expected embedding adapter errors."""
 

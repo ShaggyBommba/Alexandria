@@ -2,7 +2,7 @@ from functools import lru_cache
 from uuid import UUID
 
 from application.policy import MaxDocsFullness
-from application.ports import DocHit, DocIn, FullnessPolicy, NodeHit, Splitter
+from application.ports import DocHit, DocIn, FullnessPolicy, NodeHit, Ranker, Splitter
 from domain.entity import Node
 from application.usecases.ingest import Ingest
 from application.usecases.lint import Lint
@@ -13,7 +13,9 @@ from application.usecases.route import Route
 from application.usecases.seed import Seed
 from application.usecases.split import Split
 from infrastructure.config import Settings, get_settings
+from infrastructure.agents.ranker import make_ranker
 from infrastructure.agents.summarizer import LazySummarizer, make_summarizer
+from infrastructure.agents.splitter import make_splitter
 from infrastructure.embeddings import make_embedder
 from infrastructure.persistence.db import Db
 from infrastructure.persistence.unit_of_work import SqlUnitOfWork
@@ -35,12 +37,22 @@ class App:
         settings: Settings,
         *,
         splitter: Splitter | None = None,
+        ranker: Ranker | None = None,
         fullness: FullnessPolicy | None = None,
     ) -> None:
         """Keep app settings and injected use cases."""
         self.settings = settings
         self.fullness = fullness or MaxDocsFullness(settings.ingest.max_leaf_docs)
-        self.splitter = splitter
+        self.splitter = (
+            splitter
+            if splitter is not None
+            else make_splitter(settings.splitter.provider, settings.splitter)
+        )
+        self.ranker = (
+            ranker
+            if ranker is not None
+            else make_ranker(settings.ranker.provider, settings.ranker)
+        )
         self.db = Db(settings.database)
         self.sessions = self.db.sessions()
         self.session = self.db.session()
@@ -61,7 +73,7 @@ class App:
         # search, LLM, and ranking adapters can be injected here as they land.
         self.seed_case = Seed(uow=self.uow)
         self.route_case = Route(self.nodes)
-        self.rerank_case = Rerank()
+        self.rerank_case = Rerank(self.ranker)
         self.refs_case = Refs(uow=self.uow)
         self.split_case = Split(
             uow=self.uow,

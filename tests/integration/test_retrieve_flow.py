@@ -121,12 +121,12 @@ async def test_retrieve_flow_returns_locally_ingested_documents(monkeypatch) -> 
     assert [hit.doc.id for hit in hits] == [alpha_id, beta_id]
     assert [hit.doc.source_key for hit in hits] == ["source:alpha", "source:beta"]
     assert [hit.doc.name for hit in hits] == ["Alpha", "Beta"]
-    assert hits[0].score == pytest.approx(1.0)
+    assert hits[0].score == pytest.approx(0.4)
     assert hits[0].distance == pytest.approx(0.0)
-    assert hits[0].bm25 is None
-    assert hits[1].score == pytest.approx(0.0)
+    assert hits[0].bm25 is not None
+    assert hits[1].score < hits[0].score
     assert hits[1].distance == pytest.approx(1.0)
-    assert hits[1].bm25 is None
+    assert hits[1].bm25 is not None
     assert "alpha retrieval query" in embedder.calls
     assert summarizer.calls == [alpha, beta]
 
@@ -203,5 +203,6 @@ async def test_retrieve_flow_expands_scope_through_references(monkeypatch) -> No
     assert [hit.node.id for hit in routed] == [source_leaf_id]
     assert [hit.doc.id for hit in hits] == [target_doc_id]
     assert hits[0].doc.source_key == "source:target"
-    assert hits[0].score == pytest.approx(1.0)
+    assert hits[0].score == pytest.approx(0.4)
     assert hits[0].distance == pytest.approx(0.0)
+    assert hits[0].bm25 is not None

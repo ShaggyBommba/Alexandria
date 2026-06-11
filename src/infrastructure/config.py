@@ -79,6 +79,40 @@ class SummarizerSettings(BaseModel):
     timeout_seconds: float = Field(default=30.0, gt=0)
 
 
+class SplitterProvider(StrEnum):
+    """Supported splitter provider adapters."""
+
+    NONE = "none"
+    OPENAI = "openai"
+
+
+class SplitterSettings(BaseModel):
+    """Configuration for an optional chat-model splitter endpoint."""
+
+    provider: SplitterProvider = SplitterProvider.NONE
+    base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
+    api_key: str | None = None
+    model: str = Field(default="gpt-4o-mini", min_length=1)
+    timeout_seconds: float = Field(default=30.0, gt=0)
+
+
+class RankerProvider(StrEnum):
+    """Supported ranker provider adapters."""
+
+    NONE = "none"
+    OPENAI = "openai"
+
+
+class RankerSettings(BaseModel):
+    """Configuration for an optional chat-model ranker endpoint."""
+
+    provider: RankerProvider = RankerProvider.NONE
+    base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
+    api_key: str | None = None
+    model: str = Field(default="gpt-4o-mini", min_length=1)
+    timeout_seconds: float = Field(default=30.0, gt=0)
+
+
 class SQLSettings(BaseModel):
     """Configuration for the database used by repositories."""
 
@@ -105,6 +139,8 @@ class Settings(BaseSettings):
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     summarizer: SummarizerSettings = Field(default_factory=SummarizerSettings)
+    splitter: SplitterSettings = Field(default_factory=SplitterSettings)
+    ranker: RankerSettings = Field(default_factory=RankerSettings)
 
     model_config = SettingsConfigDict(
         env_prefix="ALEXANDRIA_",

@@ -177,9 +177,23 @@ Current concrete adapters for these ports:
   `Summarizer` through a LangChain chat model and structured response
   validation. It is wired into `App` through a deferred construction path, so
   summarizer configuration is validated when the adapter is first used.
+- `LangSplitter` in `src/infrastructure/agents/splitter.py` implements
+  `Splitter` through a LangChain chat model and structured `SplitPlan`
+  validation. It is disabled by default through `Settings.splitter.provider =
+  "none"` and can be enabled with explicit provider config. Tests and notebooks
+  may still inject local fake splitters directly into `App`.
+- `LangRanker` in `src/infrastructure/agents/ranker.py` implements `Ranker`
+  through a LangChain chat model and structured ranked document ids. It is
+  disabled by default through `Settings.ranker.provider = "none"`, rejects
+  unknown or duplicate document ids, and can be injected or configured without
+  changing retrieval workflow decisions.
 - `SqlSearch` in `src/infrastructure/search.py` implements `Search` through a
-  scoped SQL document lookup and deterministic in-process vector scoring. It
-  populates vector distance and leaves `bm25` empty until lexical scoring lands.
+  scoped SQL document lookup and a pluggable in-process `SearchPolicy`.
+  `HybridSearch` is the default policy and combines normalized BM25 with
+  clamped vector similarity. `VectorSearch` scores only by embedding distance,
+  and `LexicalSearch` scores only by BM25 over document body and summary.
+  Policies return stable `DocHit` ordering and populate score components they
+  know.
 
 Current repository and transaction ports:
 
@@ -338,9 +352,9 @@ rerank
 return top results
 ```
 
-The first implementation should keep the tree route and hybrid document search
-as separate boundaries. Deterministic scoring should work before introducing an
-LLM or agent loop.
+Keep tree routing and hybrid document search as separate boundaries. Retrieval
+remains deterministic when no ranker is configured; provider-backed ranking is
+an optional adapter behind `Rerank`, not a change to routing or search policy.
 
 ## Ingest Flow
 
