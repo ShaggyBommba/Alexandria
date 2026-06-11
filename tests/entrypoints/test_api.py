@@ -75,6 +75,25 @@ def test_api_keeps_health_and_version_working() -> None:
         assert item.get("/version").json() == {"version": "test-version"}
 
 
+def test_api_metadata_routes_do_not_construct_workflow_app(monkeypatch) -> None:
+    # Arrange
+    class ExplodingApp:
+        def __init__(self, _settings: Settings) -> None:
+            raise AssertionError("metadata route constructed App")
+
+    monkeypatch.setattr(api_module, "App", ExplodingApp)
+    monkeypatch.setattr(
+        api_module,
+        "get_settings",
+        lambda: Settings(_env_file=None),
+    )
+
+    # Act / Assert
+    with TestClient(api_module.api()) as item:
+        assert item.get("/health").json() == {"healthy": True}
+        assert item.get("/version").json() == {"version": "0.1.0"}
+
+
 def test_api_ingest_validates_and_calls_app_with_doc_in() -> None:
     # Arrange
     app = FakeApp()
@@ -197,10 +216,6 @@ def test_api_uses_request_scoped_apps_for_real_workflows(monkeypatch) -> None:
     # Arrange
     instances: list[ScopedApp] = []
 
-    class HealthApp:
-        health = True
-        version = "test-version"
-
     class ScopedApp(FakeApp):
         def __init__(self, settings: Settings) -> None:
             super().__init__()
@@ -211,7 +226,6 @@ def test_api_uses_request_scoped_apps_for_real_workflows(monkeypatch) -> None:
         def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(api_module, "get_app", lambda: HealthApp())
     monkeypatch.setattr(api_module, "App", ScopedApp)
 
     # Act

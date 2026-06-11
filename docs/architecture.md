@@ -16,10 +16,10 @@ LLM-assisted splitting so the index can expand.
 Runtime layers:
 
 - `domain` contains the current shared-kernel durable entities and value enums.
-- `application` contains ports, typed boundary shapes, and usecase workflow
-  stubs.
+- `application` contains ports, typed boundary shapes, and implemented usecase
+  workflows.
 - `infrastructure` contains SQL setup, concrete repositories, queue/outbox
-  adapters, config, observability, and future provider adapters.
+  adapters, config, observability, and provider adapters.
 - `presentation` is the entrypoint layer for API, CLI, MCP, and worker
   processes.
 
@@ -68,8 +68,7 @@ Runtime meaning:
 - Branch nodes route traversal to children.
 - Leaf nodes own documents.
 - A full active leaf can be queued for split evaluation.
-- A split leaf becomes a branch or retired node depending on the final split
-  implementation.
+- A successfully split leaf becomes an active branch with child leaves.
 
 ### Document
 
@@ -172,7 +171,9 @@ Current concrete adapters for these ports:
 - `OpenAIEmbedder` in `src/infrastructure/embeddings.py` implements
   `Embedder` through the OpenAI SDK. It is selected by passing
   `EmbeddingProvider.OPENAI` to `make_embedder`, configured through
-  `Settings.embedding`, and wired into `App` for `Ingest` and `Retrieve`.
+  `Settings.embedding`, and wired into `App` through lazy construction for
+  `Ingest` and `Retrieve`. Missing OpenAI-compatible embedding API keys raise
+  `EmbedderConfigError` when the embedding path is first used.
 - `LangSummarizer` in `src/infrastructure/agents/summarizer.py` implements
   `Summarizer` through a LangChain chat model and structured response
   validation. It is wired into `App` through a deferred construction path, so
@@ -180,13 +181,15 @@ Current concrete adapters for these ports:
 - `LangSplitter` in `src/infrastructure/agents/splitter.py` implements
   `Splitter` through a LangChain chat model and structured `SplitPlan`
   validation. It is disabled by default through `Settings.splitter.provider =
-  "none"` and can be enabled with explicit provider config. Tests and notebooks
-  may still inject local fake splitters directly into `App`.
+  "none"` and can be enabled with explicit provider config. Missing
+  provider-backed splitter API keys raise `SplitterConfigError`. Tests and
+  notebooks may still inject local fake splitters directly into `App`.
 - `LangRanker` in `src/infrastructure/agents/ranker.py` implements `Ranker`
   through a LangChain chat model and structured ranked document ids. It is
   disabled by default through `Settings.ranker.provider = "none"`, rejects
-  unknown or duplicate document ids, and can be injected or configured without
-  changing retrieval workflow decisions.
+  missing provider-backed API keys with `RankerConfigError`, rejects unknown or
+  duplicate document ids, and can be injected or configured without changing
+  retrieval workflow decisions.
 - `SqlSearch` in `src/infrastructure/search.py` implements `Search` through a
   scoped SQL document lookup and a pluggable in-process `SearchPolicy`.
   `HybridSearch` is the default policy and combines normalized BM25 with
@@ -214,6 +217,37 @@ The `Search` port owns document retrieval inside an already-scoped leaf set. A
 concrete infrastructure adapter may combine embeddings, BM25, SQL, database
 extensions, or external search engines behind this port.
 
+## App Wiring And Startup
+
+`App` is the workflow facade. It wires settings, `Db`, SQL repositories,
+`SqlUnitOfWork`, `SqlSearch`, provider adapters, and use cases. `App.setup()`
+calls `Db.create_all()` before workflow use so local development can start from
+an empty database.
+
+Provider construction is lazy where metadata paths should stay cheap:
+
+- embeddings are built on first `embed(...)`
+- summarization is built on first `summarize(...)`
+- splitter and ranker construction only happens when an injected fake is not
+  supplied and their provider setting is enabled
+
+Metadata entrypoints stay lightweight. API `GET /health` and `GET /version`
+return configured process metadata without constructing a workflow `App` when
+one was not injected. CLI `version` reads settings directly. Ingest, retrieve,
+refs, MCP tools, and worker paths still construct `App` and therefore require
+configured database access.
+
+## Database Setup Strategy
+
+Local and test app wiring use SQLAlchemy metadata creation, not migrations.
+`Db.create_all()` first ensures the pgvector extension exists for PostgreSQL
+through `CREATE EXTENSION IF NOT EXISTS vector`, then calls
+`Base.metadata.create_all(...)`.
+
+This is the explicit development strategy for the current repository state.
+Alembic or another migration system is deferred until production deployment or
+schema-evolution requirements are added.
+
 ## Outbox
 
 The current outbox API is intentionally small:
@@ -240,7 +274,7 @@ key when duplicate split publication is possible.
 
 ## Usecases
 
-Current usecase stubs live in `src/application/usecases`.
+Current usecases live in `src/application/usecases`.
 
 ### Seed
 
@@ -271,10 +305,10 @@ the current state still requires work.
 
 ### Split
 
-Splits a full leaf into child nodes and redistributes documents. It should call
-the `Splitter` port, validate the returned `SplitPlan` against local document
-ids, create children, move documents, update the parent node, clear stale
-references, and leave follow-up reference rebuild work to a later delivery.
+Splits a full leaf into child nodes and redistributes documents. It calls the
+`Splitter` port, validates the returned `SplitPlan` against local document ids,
+creates children, moves documents, updates the parent node, and clears stale
+references. Reference rebuild remains a separate `Refs` workflow.
 
 Do not hold a database transaction open during the LLM call. Mark the source
 leaf as `splitting` before the call so new routing will not target it, validate
@@ -446,6 +480,10 @@ app = get_app()
 print(app.name, app.version)
 PY
 ```
+
+This app wiring check requires the configured database to be reachable because
+`App.setup()` creates local schema. Metadata-only API/CLI checks should use the
+entrypoint tests instead of `get_app()`.
 
 ## Architecture Rules
 

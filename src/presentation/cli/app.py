@@ -1,7 +1,5 @@
 import asyncio
-from contextlib import contextmanager
 import json
-from typing import Generator
 from uuid import UUID
 
 import click
@@ -9,6 +7,7 @@ from pydantic import ValidationError
 
 from application.app import App, get_app
 from domain.exceptions import BaseError
+from infrastructure.config import get_settings
 from presentation.contracts import (
     IngestRequest,
     RetrieveRequest,
@@ -17,34 +16,24 @@ from presentation.contracts import (
 )
 
 
-@contextmanager
-def lifecycle() -> Generator[App, None, None]:
-    """Handles the setup and potential teardown hooks of the App singleton."""
-    yield get_app()
-
-
 @click.group()
-@click.pass_context
-def cli(ctx: click.Context) -> None:
+def cli() -> None:
     """Parser command line interface."""
-    # Registers the lifecycle context manager with Click.
-    ctx.obj = ctx.with_resource(lifecycle())
 
 
 @cli.command()
-@click.pass_obj
-def version(app: App) -> None:
+def version() -> None:
     """Print the application version."""
-    click.echo(app.version)
+    click.echo(get_settings().app.app_version)
 
 
 @cli.command("ingest")
 @click.option("--name", required=True, help="Document name.")
 @click.option("--body", required=True, help="Document body.")
 @click.option("--source-key", default=None, help="Optional source idempotency key.")
-@click.pass_obj
-def ingest(app: App, name: str, body: str, source_key: str | None) -> None:
+def ingest(name: str, body: str, source_key: str | None) -> None:
     """Ingest one document through the application boundary."""
+    app: App = get_app()
     try:
         payload = IngestRequest(name=name, body=body, source_key=source_key)
         id = asyncio.run(app.ingest(payload.doc()))
@@ -59,9 +48,9 @@ def ingest(app: App, name: str, body: str, source_key: str | None) -> None:
 @cli.command("retrieve")
 @click.argument("query")
 @click.option("--limit", default=10, type=int, show_default=True, help="Maximum hits.")
-@click.pass_obj
-def retrieve(app: App, query: str, limit: int) -> None:
+def retrieve(query: str, limit: int) -> None:
     """Retrieve documents through the application boundary."""
+    app: App = get_app()
     try:
         payload = RetrieveRequest(query=query, limit=limit)
         hits = asyncio.run(app.retrieve(payload.query, limit=payload.limit))
@@ -76,9 +65,9 @@ def retrieve(app: App, query: str, limit: int) -> None:
 
 @cli.command("refs")
 @click.argument("node_id")
-@click.pass_obj
-def build_refs(app: App, node_id: str) -> None:
+def build_refs(node_id: str) -> None:
     """Build semantic refs for one node."""
+    app: App = get_app()
     try:
         id = UUID(node_id)
     except ValueError as exc:

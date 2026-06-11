@@ -10,13 +10,12 @@ tasks:
       - task --list
 
   setup:
-    desc: Set up the development environment
+    desc: Set up the local development loop
     cmds:
-      - uv sync --no-dev
       - uv sync --dev
       - git config --unset-all core.hooksPath || true
       - uv run pre-commit install -c .githooks/.pre-commit-config.yaml --hook-type pre-commit --hook-type pre-push
-      - uv run pre-commit run -c .githooks/.pre-commit-config.yaml --all-files
+      - task test
 
   sync:
     desc: Sync the full uv workspace
@@ -24,10 +23,15 @@ tasks:
       - uv sync
 
   test:
-    desc: Run checks and tests
+    desc: Run the local and CI validation matrix
     cmds:
       - task lint
-      - uv run pytest
+      - uv run pytest --collect-only -q
+      - uv run pytest tests/application -q
+      - uv run pytest tests/infrastructure -q
+      - uv run pytest tests/entrypoints -q
+      - uv run pytest tests/integration -q
+      - uv run pytest tests/domain tests/test_scaffold.py -q
 
   lint:
     desc: Lint all modules
