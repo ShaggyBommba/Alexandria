@@ -55,21 +55,21 @@ class ReferenceRepo:
             return []
 
         if self.vector_sql_enabled():
-            distance = Node.embedding.cosine_distance(embedding).label("distance")
+            qdist = Node.embedding.cosine_distance(embedding).label("qdist")
             rows = self._session.execute(
-                select(Reference, Node, distance)
+                select(Reference, Node, qdist)
                 .join(Node, Reference.to_node_id == Node.id)
                 .where(
                     Reference.from_node_id.in_(sorted(ids)),
                     Node.kind == "leaf",
                     Node.status == "active",
                 )
-                .order_by(distance.asc(), Reference.rank.asc(), Reference.id.asc())
+                .order_by(qdist.asc(), Reference.rank.asc(), Reference.id.asc())
                 .limit(limit)
             ).all()
             return [
-                RefHit(ref=ref, node=node, distance=float(distance))
-                for ref, node, distance in rows
+                RefHit(ref=ref, node=node, distance=float(qdist))
+                for ref, node, qdist in rows
             ]
 
         rows = self._session.execute(

@@ -117,11 +117,17 @@ class FakeDocs:
 
 
 class FakeNodes:
-    def __init__(self, docs: FakeDocs, events: list[str]) -> None:
+    def __init__(
+        self, docs: FakeDocs, events: list[str], nodes: list[Node] | None = None
+    ) -> None:
         self.docs = docs
         self.events = events
+        self.registry: dict[UUID, Node] = {node.id: node for node in (nodes or [])}
         self.count_calls: list[UUID] = []
         self.saved: list[Node] = []
+
+    async def get(self, id: UUID) -> Node | None:
+        return self.registry.get(id)
 
     async def count(self, id: UUID) -> int:
         self.events.append("count")
@@ -149,10 +155,11 @@ class FakeUow:
         self,
         events: list[str],
         docs: list[Document] | None = None,
+        nodes: list[Node] | None = None,
     ) -> None:
         self.events = events
         self.docs = FakeDocs(docs or [], events)
-        self.nodes = FakeNodes(self.docs, events)
+        self.nodes = FakeNodes(self.docs, events, nodes=nodes)
         self.outbox = FakeOutbox(events)
         self.commits = 0
 
@@ -176,7 +183,7 @@ def make_case(
     root = node(1)
     embedding = [0.5, 0.25]
     return Ingest(
-        uow=uow if uow is not None else FakeUow(event_log),
+        uow=uow if uow is not None else FakeUow(event_log, nodes=[root]),
         embedder=embedder
         if embedder is not None
         else FakeEmbedder(embedding, event_log),
@@ -240,7 +247,7 @@ async def test_ingest_persists_document_on_nearest_active_leaf() -> None:
     farther = node(4)
     chosen = node(5)
     embedding = [0.8, 0.2]
-    uow = FakeUow(events)
+    uow = FakeUow(events, nodes=[branch, retired, farther, chosen])
     embedder = FakeEmbedder(embedding, events)
     summarizer = FakeSummarizer("Routes through the semantic index.", events)
     seed = FakeSeed(root, events)
@@ -337,7 +344,7 @@ async def test_ingest_appends_split_check_when_explicit_policy_says_leaf_is_full
     events: list[str] = []
     leaf = node(1)
     existing = stored_doc(10, leaf)
-    uow = FakeUow(events, docs=[existing])
+    uow = FakeUow(events, docs=[existing], nodes=[leaf])
     case = Ingest(
         uow=uow,
         embedder=FakeEmbedder([0.3, 0.7], events),
@@ -376,7 +383,7 @@ async def test_ingest_does_not_append_split_check_before_policy_is_full() -> Non
     # Arrange
     events: list[str] = []
     leaf = node(1)
-    uow = FakeUow(events)
+    uow = FakeUow(events, nodes=[leaf])
     case = Ingest(
         uow=uow,
         embedder=FakeEmbedder([0.3, 0.7], events),

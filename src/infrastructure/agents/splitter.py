@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validator
 
 from application.ports import ChildPlan, SplitPlan
+from application.ports import Embedder as EmbedderPort
 from application.ports import Splitter as SplitterPort
 from domain.entity import Document, Node
 from infrastructure.config import SplitterProvider, SplitterSettings
@@ -23,14 +24,17 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are a splitting agent for Alexandria, a semantic wiki. Split one full "
-    "leaf node into coherent child leaf nodes and assign every supplied "
-    "document id to the best child."
+    "leaf node into coherent child leaf nodes. The assignment is a strict "
+    "partition: assign every supplied document to exactly one child, never "
+    "repeat a document across children, and never leave a document unassigned."
 )
 
 USER_PROMPT = (
     "Return only the structured split plan. Use only the supplied document ids. "
-    "Each child needs a concise name, factual description, embedding vector, "
-    "and assigned document ids."
+    "Create at least two children and never more children than the number of "
+    "documents. Assign each document id to exactly one child, with no "
+    "duplicates and none left out. Each child needs a concise name, factual "
+    "description, and its assigned document ids."
 )
 
 
@@ -39,7 +43,6 @@ class SplitChildResult(BaseModel):
 
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
-    embedding: list[float] = Field(min_length=1)
     docs: list[UUID] = Field(min_length=1)
 
     @field_validator("name", "description")
@@ -54,19 +57,23 @@ class SplitChildResult(BaseModel):
 class SplitResult(BaseModel):
     """Structured split plan returned by the LangChain agent."""
 
-    children: list[SplitChildResult] = Field(min_length=1)
+    children: list[SplitChildResult] = Field(min_length=1, max_length=10)
 
-    def plan(self) -> SplitPlan:
-        """Convert provider output to the application split plan shape."""
+    def plan(self, embeddings: list[list[float]]) -> SplitPlan:
+        """Convert provider output to the application split plan shape.
+
+        Child embeddings are derived by the adapter from each child's
+        description, not returned by the chat model.
+        """
         return SplitPlan(
             children=[
                 ChildPlan(
                     name=child.name,
                     description=child.description,
-                    embedding=list(child.embedding),
+                    embedding=list(embedding),
                     docs=list(child.docs),
                 )
-                for child in self.children
+                for child, embedding in zip(self.children, embeddings, strict=True)
             ]
         )
 
@@ -77,9 +84,11 @@ class LangSplitter:
     def __init__(
         self,
         client: BaseChatModel,
+        embedder: EmbedderPort,
         tools: Sequence[Any] | None = None,
     ) -> None:
         self.client = client
+        self.embedder = embedder
         self.tools = list(tools or [])
 
     @cached_property
@@ -120,8 +129,11 @@ class LangSplitter:
         except Exception as exc:
             raise SplitterError(f"Splitter agent execution failed: {exc}") from exc
 
+        embeddings = [
+            await self.embedder.embed(child.description) for child in result.children
+        ]
         logger.debug("Agent returned split result: %s", result.model_dump_json(indent=2))
-        return result.plan()
+        return result.plan(embeddings)
 
     @staticmethod
     def parsed(output: Any) -> SplitResult:
@@ -164,6 +176,7 @@ def document(docs: list[Document]) -> str:
 def make_splitter(
     provider: SplitterProvider,
     settings: SplitterSettings,
+    embedder: EmbedderPort,
 ) -> SplitterPort | None:
     """Build the configured splitter adapter, or disable it explicitly."""
     if provider is SplitterProvider.NONE:
@@ -181,5 +194,6 @@ def make_splitter(
                 model=settings.model,
                 timeout=settings.timeout_seconds,
             ),
+            embedder=embedder,
         )
     raise SplitterConfigError(f"unsupported splitter provider: {provider}")

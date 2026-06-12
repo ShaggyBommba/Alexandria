@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import SecretStr
 
 from application.ports import DocIn, Summarizer
 from infrastructure.agents.summarizer import LangSummarizer, make_summarizer
@@ -84,9 +85,9 @@ async def test_summarize_rejects_empty_summary() -> None:
 
 @pytest.mark.parametrize(
     "value",
-    [None, "", "   "],
+    [None, SecretStr(""), SecretStr("   ")],
 )
-def test_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
+def test_factory_rejects_missing_or_blank_api_key(value: SecretStr | None) -> None:
     settings = SummarizerSettings(api_key=value)
 
     with pytest.raises(SummarizerConfigError, match="requires an api_key"):
@@ -96,7 +97,7 @@ def test_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
 def test_factory_constructs_lang_summarizer_for_openai(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = SummarizerSettings(api_key="test-key")
+    settings = SummarizerSettings(api_key=SecretStr("test-key"))
     captured: dict[str, object] = {}
 
     class FakeOpenAIClient:
@@ -111,5 +112,6 @@ def test_factory_constructs_lang_summarizer_for_openai(
     summarizer = make_summarizer(SummarizerProvider.OPENAI, settings)
 
     assert isinstance(summarizer, LangSummarizer)
-    assert captured["api_key"] == "test-key"
+    assert isinstance(captured["api_key"], SecretStr)
+    assert captured["api_key"].get_secret_value() == "test-key"
     assert captured["model"] == "gpt-4o-mini"

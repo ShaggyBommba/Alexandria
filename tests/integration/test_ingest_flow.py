@@ -9,7 +9,12 @@ import application.app as app_module
 from application.ports import DocIn
 from domain.entity import Base, Document, Job, Node, VECTOR_DIMENSIONS
 from domain.values import JobKind
-from infrastructure.config import IngestSettings, Settings
+from infrastructure.config import (
+    IngestSettings,
+    RankerSettings,
+    Settings,
+    SplitterSettings,
+)
 
 
 class MemoryDb:
@@ -76,7 +81,12 @@ async def test_ingest_smoke_appends_split_check_when_leaf_is_full(monkeypatch) -
         app_module, "make_summarizer", lambda _provider, _settings: fake_summarizer
     )
 
-    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=2))
+    settings = Settings(
+        _env_file=None,
+        ingest=IngestSettings(max_leaf_docs=2),
+        splitter=SplitterSettings(),
+        ranker=RankerSettings(),
+    )
     app = App(settings)
 
     docs = [

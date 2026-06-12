@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from logging import getLogger
-from typing import Protocol
+from typing import Any, Protocol
 
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, RateLimitError
 from openai.types import CreateEmbeddingResponse
@@ -40,7 +40,9 @@ class OpenAIEmbedder:
         client: OpenAIClient | None = None,
     ) -> None:
         self.settings = settings
-        api_key = (settings.api_key or "").strip()
+        api_key = (
+            settings.api_key.get_secret_value() if settings.api_key else ""
+        ).strip()
         if client is None and not api_key:
             raise EmbedderConfigError("embedding provider openai requires an api_key")
         self.client = client or AsyncOpenAI(
@@ -51,7 +53,7 @@ class OpenAIEmbedder:
 
     async def embed(self, text: str) -> list[float]:
         """Return one embedding vector for the provided text."""
-        request: dict[str, object] = {
+        request: dict[str, Any] = {
             "input": text,
             "model": self.settings.model,
         }
@@ -96,19 +98,6 @@ class OpenAIEmbedder:
                 f"expected {self.settings.dimensions}"
             )
             raise EmbedderResponseError(message)
-
-
-class LazyEmbedder:
-    """Defer embedder construction until embeddings are first requested."""
-
-    def __init__(self, factory: Callable[[], EmbedderPort]) -> None:
-        self._factory = factory
-        self._instance: EmbedderPort | None = None
-
-    async def embed(self, text: str) -> list[float]:
-        if self._instance is None:
-            self._instance = self._factory()
-        return await self._instance.embed(text)
 
 
 def make_embedder(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from application.exceptions import (
@@ -19,6 +20,8 @@ from application.usecases.route import Route
 from application.usecases.seed import Seed
 from domain.entity import Document, Job, Node
 from domain.values import JobKind
+
+logger = logging.getLogger(__name__)
 
 
 def document_text(doc: DocIn) -> str:
@@ -78,6 +81,7 @@ class Ingest:
 
     async def run(self, doc: DocIn) -> UUID:
         """Persist one document and queue split work when needed."""
+        logger.info("ingest started source_key=%s name=%s", doc.source_key, doc.name)
         if self.uow is None:
             raise MissingUnitOfWork("Ingest requires a UnitOfWork")
         if self.embedder is None:
@@ -91,9 +95,12 @@ class Ingest:
         if self.fullness is None:
             raise IngestDependencyError("Ingest requires a FullnessPolicy")
 
+        logger.info("ingest summarizing source_key=%s", doc.source_key)
         summary = await self.summarizer.summarize(doc)
+        logger.info("ingest embedding source_key=%s", doc.source_key)
         embedding = await self.embedder.embed(document_text(doc))
 
+        logger.info("ingest seeding and routing source_key=%s", doc.source_key)
         await self.seed.run()
         candidates = await self.route.run(embedding, limit=self.route_limit)
         leaf = self.pick_leaf(candidates)
@@ -111,19 +118,39 @@ class Ingest:
 
         uow = self.uow
         doc_id = await uow.docs.add(item)
-        leaf.doc_count = await uow.nodes.count(leaf.id)
-        await uow.nodes.save(leaf)
 
-        if self.fullness.full(leaf.doc_count):
+        # Update the count on a node owned by the unit-of-work session. The routed
+        # leaf belongs to the read session used by Route, and writing it there
+        # would deadlock the write session against the read session on Postgres.
+        node = await uow.nodes.get(leaf.id)
+        if node is None:
+            raise IngestLeafError("Ingest lost the routed leaf before persisting")
+        node.doc_count = await uow.nodes.count(node.id)
+        await uow.nodes.save(node)
+
+        if self.fullness.full(node.doc_count):
+            logger.info(
+                "ingest queueing split check source_key=%s leaf_id=%s doc_count=%s",
+                doc.source_key,
+                node.id,
+                node.doc_count,
+            )
             await uow.outbox.append(
                 Job(
                     kind=JobKind.SPLIT_CHECK,
-                    payload={"node_id": str(leaf.id)},
-                    key=leaf.id,
+                    payload={"node_id": str(node.id)},
+                    key=node.id,
                 )
             )
 
         await uow.commit()
+        logger.info(
+            "ingest committed source_key=%s doc_id=%s leaf_id=%s doc_count=%s",
+            doc.source_key,
+            doc_id,
+            node.id,
+            node.doc_count,
+        )
         return doc_id
 
     def pick_leaf(self, candidates: list[NodeHit]) -> Node | None:

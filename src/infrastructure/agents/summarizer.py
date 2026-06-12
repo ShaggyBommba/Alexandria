@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from functools import cached_property
 from typing import Any
 
@@ -10,7 +10,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, SecretStr, ValidationError
 
 from application.ports import DocIn
 from application.ports import Summarizer as SummarizerPort
@@ -116,27 +116,14 @@ class LangSummarizer:
             ) from exc
 
 
-class LazySummarizer:
-    """Defer summarizer construction until it is first used."""
-
-    def __init__(self, factory: Callable[[], SummarizerPort]) -> None:
-        self._factory = factory
-        self._instance: SummarizerPort | None = None
-
-    async def summarize(self, doc: DocIn) -> str:
-        if self._instance is None:
-            self._instance = self._factory()
-        return await self._instance.summarize(doc)
-
-
 def make_summarizer(
     provider: SummarizerProvider,
     settings: SummarizerSettings,
 ) -> SummarizerPort:
     """Build the configured summarizer adapter."""
     if provider is SummarizerProvider.OPENAI:
-        api_key = (settings.api_key or "").strip()
-        if not api_key:
+        api_key: SecretStr | None = settings.api_key
+        if api_key is None or not api_key.get_secret_value().strip():
             raise SummarizerConfigError(
                 "summarizer provider openai requires an api_key"
             )

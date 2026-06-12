@@ -50,14 +50,24 @@ def doc(value: int, source: Node) -> Document:
     )
 
 
-def adapter(agent: FakeAgent) -> LangSplitter:
-    splitter = LangSplitter(client=object())  # type: ignore[arg-type]
+class FakeEmbedder:
+    def __init__(self, embeddings: dict[str, list[float]] | None = None) -> None:
+        self.embeddings = embeddings or {}
+        self.calls: list[str] = []
+
+    async def embed(self, text: str) -> list[float]:
+        self.calls.append(text)
+        return self.embeddings.get(text, [0.0, 0.0])
+
+
+def adapter(agent: FakeAgent, embedder: FakeEmbedder | None = None) -> LangSplitter:
+    splitter = LangSplitter(client=object(), embedder=embedder or FakeEmbedder())  # type: ignore[arg-type]
     splitter.agent = agent  # type: ignore[method-assign]
     return splitter
 
 
 def test_lang_splitter_satisfies_port() -> None:
-    splitter = LangSplitter(client=object())  # type: ignore[arg-type]
+    splitter = LangSplitter(client=object(), embedder=FakeEmbedder())  # type: ignore[arg-type]
 
     assert isinstance(splitter, Splitter)
 
@@ -74,20 +84,21 @@ async def test_splitter_validates_structured_output_and_returns_split_plan() -> 
                     {
                         "name": "  Alpha child  ",
                         "description": "  Alpha documents  ",
-                        "embedding": [0.1, 0.2],
                         "docs": [str(first.id)],
                     },
                     {
                         "name": "Beta child",
                         "description": "Beta documents",
-                        "embedding": [0.3, 0.4],
                         "docs": [str(second.id)],
                     },
                 ]
             }
         }
     )
-    splitter = adapter(agent)
+    embedder = FakeEmbedder(
+        {"Alpha documents": [0.1, 0.2], "Beta documents": [0.3, 0.4]}
+    )
+    splitter = adapter(agent, embedder)
 
     plan = await splitter.split(source, [second, first])
 
@@ -97,7 +108,9 @@ async def test_splitter_validates_structured_output_and_returns_split_plan() -> 
         "Beta documents",
     ]
     assert plan.children[0].embedding == [0.1, 0.2]
+    assert plan.children[1].embedding == [0.3, 0.4]
     assert plan.children[0].docs == [first.id]
+    assert embedder.calls == ["Alpha documents", "Beta documents"]
     messages = agent.payload["messages"]
     assert "semantic wiki" in messages[0].content
     assert str(first.id) in messages[1].content
@@ -122,7 +135,6 @@ async def test_splitter_rejects_invalid_structured_output() -> None:
                         {
                             "name": "  ",
                             "description": "Missing useful name",
-                            "embedding": [],
                             "docs": [],
                         }
                     ]
@@ -138,21 +150,23 @@ async def test_splitter_rejects_invalid_structured_output() -> None:
 def test_splitter_factory_returns_none_when_disabled() -> None:
     settings = SplitterSettings()
 
-    assert make_splitter(SplitterProvider.NONE, settings) is None
+    assert make_splitter(SplitterProvider.NONE, settings, FakeEmbedder()) is None
 
 
-@pytest.mark.parametrize("value", [None, "", "   "])
-def test_splitter_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
+@pytest.mark.parametrize("value", [None, SecretStr(""), SecretStr("   ")])
+def test_splitter_factory_rejects_missing_or_blank_api_key(
+    value: SecretStr | None,
+) -> None:
     settings = SplitterSettings(provider=SplitterProvider.OPENAI, api_key=value)
 
     with pytest.raises(SplitterConfigError, match="requires an api_key"):
-        make_splitter(SplitterProvider.OPENAI, settings)
+        make_splitter(SplitterProvider.OPENAI, settings, FakeEmbedder())
 
 
 def test_splitter_factory_constructs_lang_splitter_for_openai(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = SplitterSettings(provider=SplitterProvider.OPENAI, api_key="test-key")
+    settings = SplitterSettings(provider=SplitterProvider.OPENAI, api_key=SecretStr("test-key"))
     captured: dict[str, object] = {}
 
     class FakeOpenAIClient:
@@ -161,9 +175,11 @@ def test_splitter_factory_constructs_lang_splitter_for_openai(
 
     monkeypatch.setattr("infrastructure.agents.splitter.ChatOpenAI", FakeOpenAIClient)
 
-    splitter = make_splitter(SplitterProvider.OPENAI, settings)
+    embedder = FakeEmbedder()
+    splitter = make_splitter(SplitterProvider.OPENAI, settings, embedder)
 
     assert isinstance(splitter, LangSplitter)
+    assert splitter.embedder is embedder
     assert isinstance(captured["api_key"], SecretStr)
     assert captured["api_key"].get_secret_value() == "test-key"
     assert captured["model"] == "gpt-4o-mini"

@@ -178,11 +178,11 @@ async def test_near_uses_bounded_pgvector_query_with_filters() -> None:
     assert session.statement is not None
     compiled = session.statement.compile(dialect=postgresql.dialect())
     sql = str(compiled)
-    assert "nodes.embedding <=> %(embedding_1)s AS distance" in sql
+    assert "nodes.embedding <=> %(embedding_1)s AS qdist" in sql
     assert "nodes.status = %(status_1)s" in sql
     assert "nodes.parent_id = %(parent_id_1)s::UUID" in sql
     assert "nodes.id NOT IN" in sql
-    assert "ORDER BY distance ASC, nodes.id ASC" in sql
+    assert "ORDER BY qdist ASC, nodes.id ASC" in sql
     assert "LIMIT %(param_1)s" in sql
     assert compiled.params["status_1"] == "active"
     assert compiled.params["parent_id_1"] == uid(1)

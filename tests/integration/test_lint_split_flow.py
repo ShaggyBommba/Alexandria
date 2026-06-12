@@ -11,7 +11,12 @@ import application.app as app_module
 from application.ports import ChildPlan, DocIn, SplitPlan
 from domain.entity import Base, Document, Job, Node, Reference, VECTOR_DIMENSIONS
 from domain.values import JobKind, JobStatus
-from infrastructure.config import IngestSettings, Settings
+from infrastructure.config import (
+    IngestSettings,
+    RankerSettings,
+    Settings,
+    SplitterSettings,
+)
 from infrastructure.repositories.outbox import OutboxRepo
 from presentation.worker.app import Worker
 
@@ -103,7 +108,12 @@ async def test_worker_lint_splits_full_leaf_and_marks_job_done(monkeypatch) -> N
         lambda _provider, _settings: FakeSummarizer(),
     )
 
-    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=2))
+    settings = Settings(
+        _env_file=None,
+        ingest=IngestSettings(max_leaf_docs=2),
+        splitter=SplitterSettings(),
+        ranker=RankerSettings(),
+    )
     app = App(settings, splitter=splitter)
 
     with db.session() as session:

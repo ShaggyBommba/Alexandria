@@ -11,7 +11,12 @@ from application.app import App
 import application.app as app_module
 from application.ports import DocIn
 from domain.entity import Base, VECTOR_DIMENSIONS
-from infrastructure.config import IngestSettings, Settings
+from infrastructure.config import (
+    IngestSettings,
+    RankerSettings,
+    Settings,
+    SplitterSettings,
+)
 from presentation.api.app import api
 
 
@@ -92,7 +97,12 @@ def make_app(monkeypatch) -> tuple[App, FakeEmbedder, FakeSummarizer]:
         lambda _provider, _settings: summarizer,
     )
 
-    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=100))
+    settings = Settings(
+        _env_file=None,
+        ingest=IngestSettings(max_leaf_docs=100),
+        splitter=SplitterSettings(),
+        ranker=RankerSettings(),
+    )
     return App(settings), embedder, summarizer
 
 

@@ -57,7 +57,7 @@ class EmbeddingSettings(BaseModel):
 
     provider: EmbeddingProvider = EmbeddingProvider.OPENAI
     base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     model: str = Field(default="text-embedding-3-small", min_length=1)
     dimensions: int | None = Field(default=None, gt=0)
     timeout_seconds: float = Field(default=30.0, gt=0)
@@ -74,7 +74,7 @@ class SummarizerSettings(BaseModel):
 
     provider: SummarizerProvider = SummarizerProvider.OPENAI
     base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     model: str = Field(default="gpt-4o-mini", min_length=1)
     timeout_seconds: float = Field(default=30.0, gt=0)
 
@@ -108,7 +108,7 @@ class RankerSettings(BaseModel):
 
     provider: RankerProvider = RankerProvider.NONE
     base_url: str = Field(default="https://api.openai.com/v1", min_length=1)
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     model: str = Field(default="gpt-4o-mini", min_length=1)
     timeout_seconds: float = Field(default=30.0, gt=0)
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from application.exceptions import RetrieveDependencyError
 from application.ports import DocHit, Embedder, ReferenceRepo, Search
 from application.usecases.rerank import Rerank
 from application.usecases.route import Route
+
+logger = logging.getLogger(__name__)
 
 
 class Retrieve:
@@ -47,37 +51,53 @@ class Retrieve:
 
     async def run(self, query: str, limit: int = 10) -> list[DocHit]:
         """Embed, route, expand references, hybrid search, then rerank."""
+        logger.info("retrieve started query_len=%s limit=%s", len(query), limit)
         if limit <= 0:
+            logger.info("retrieve skipped because limit is not positive")
             return []
 
-        missing = []
-        if self.embedder is None:
-            missing.append("Embedder")
-        if self.route is None:
-            missing.append("Route")
-        if self.search is None:
-            missing.append("Search")
-        if missing:
-            dependencies = ", ".join(missing)
+        if self.embedder is None or self.route is None or self.search is None:
+            dependencies = ", ".join(
+                name
+                for name, dependency in (
+                    ("Embedder", self.embedder),
+                    ("Route", self.route),
+                    ("Search", self.search),
+                )
+                if dependency is None
+            )
             raise RetrieveDependencyError(
                 f"Retrieve requires configured dependencies: {dependencies}",
             )
 
+        logger.info("retrieve embedding query")
         query_embedding = await self.embedder.embed(query)
+        logger.info("retrieve routing query")
         routed = await self.route.run(query_embedding, limit=limit)
         leaves = {hit.node.id for hit in routed}
+        logger.info("retrieve routed leaves=%s", len(leaves))
         if not leaves:
+            logger.info("retrieve finished with no routed leaves")
             return []
 
         if self.refs is not None:
+            logger.info("retrieve expanding references from leaves=%s", len(leaves))
             refs = await self.refs.near(set(leaves), query_embedding, limit)
             leaves.update(hit.node.id for hit in refs)
+            logger.info("retrieve expanded scope leaves=%s refs=%s", len(leaves), len(refs))
 
+        logger.info("retrieve searching scoped documents leaves=%s", len(leaves))
         hits = await self.search.find(query, query_embedding, leaves, limit)
+        logger.info("retrieve search hits=%s", len(hits))
         if not hits:
+            logger.info("retrieve finished with no search hits")
             return []
 
         if self.rerank is not None:
-            return await self.rerank.run(query, hits, limit)
+            logger.info("retrieve reranking hits=%s", len(hits))
+            ranked = await self.rerank.run(query, hits, limit)
+            logger.info("retrieve finished ranked_hits=%s", len(ranked))
+            return ranked
 
+        logger.info("retrieve finished hits=%s", min(len(hits), limit))
         return hits[:limit]

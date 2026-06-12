@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
+from pydantic import SecretStr
 
 from application.ports import DocHit, Ranker
 from domain.entity import Document, Node
@@ -171,8 +172,10 @@ def test_ranker_factory_returns_none_when_disabled() -> None:
     assert make_ranker(RankerProvider.NONE, settings) is None
 
 
-@pytest.mark.parametrize("value", [None, "", "   "])
-def test_ranker_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
+@pytest.mark.parametrize("value", [None, SecretStr(""), SecretStr("   ")])
+def test_ranker_factory_rejects_missing_or_blank_api_key(
+    value: SecretStr | None,
+) -> None:
     settings = RankerSettings(provider=RankerProvider.OPENAI, api_key=value)
 
     with pytest.raises(RankerConfigError, match="requires an api_key"):
@@ -182,7 +185,7 @@ def test_ranker_factory_rejects_missing_or_blank_api_key(value: str | None) -> N
 def test_ranker_factory_constructs_lang_ranker_for_openai(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = RankerSettings(provider=RankerProvider.OPENAI, api_key="test-key")
+    settings = RankerSettings(provider=RankerProvider.OPENAI, api_key=SecretStr("test-key"))
     captured: dict[str, object] = {}
 
     class FakeOpenAIClient:
@@ -194,5 +197,6 @@ def test_ranker_factory_constructs_lang_ranker_for_openai(
     ranker = make_ranker(RankerProvider.OPENAI, settings)
 
     assert isinstance(ranker, LangRanker)
-    assert captured["api_key"] == "test-key"
+    assert isinstance(captured["api_key"], SecretStr)
+    assert captured["api_key"].get_secret_value() == "test-key"
     assert captured["model"] == "gpt-4o-mini"

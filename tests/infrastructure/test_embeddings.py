@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from pydantic import SecretStr
 from openai import APIConnectionError, APIStatusError, RateLimitError
 from openai.types import CreateEmbeddingResponse
 from openai.types.embedding import Embedding
@@ -61,7 +62,7 @@ async def test_embedder_uses_openai_sdk_embeddings_resource() -> None:
     client = FakeClient(embeddings)
     settings = EmbeddingSettings(
         base_url="http://localhost:1234/v1",
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         model="text-embedding-3-small",
         dimensions=3,
         timeout_seconds=5.0,
@@ -105,7 +106,9 @@ async def test_embedder_omits_dimensions_when_not_configured() -> None:
 
 def test_factory_returns_openai_embedder_for_provider_enum() -> None:
     # Arrange
-    settings = EmbeddingSettings(provider=EmbeddingProvider.OPENAI, api_key="test-key")
+    settings = EmbeddingSettings(
+        provider=EmbeddingProvider.OPENAI, api_key=SecretStr("test-key")
+    )
 
     # Act
     embedder = make_embedder(EmbeddingProvider.OPENAI, settings)
@@ -115,8 +118,8 @@ def test_factory_returns_openai_embedder_for_provider_enum() -> None:
     assert isinstance(embedder, EmbedderPort)
 
 
-@pytest.mark.parametrize("value", [None, "", "   "])
-def test_factory_rejects_missing_or_blank_api_key(value: str | None) -> None:
+@pytest.mark.parametrize("value", [None, SecretStr(""), SecretStr("   ")])
+def test_factory_rejects_missing_or_blank_api_key(value: SecretStr | None) -> None:
     settings = EmbeddingSettings(provider=EmbeddingProvider.OPENAI, api_key=value)
 
     with pytest.raises(EmbedderConfigError, match="requires an api_key"):

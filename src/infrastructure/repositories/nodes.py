@@ -77,18 +77,15 @@ class NodeRepo:
         if exclude:
             filters.append(Node.id.not_in(exclude))
 
-        if self.vector_sql_enabled():
-            distance = Node.embedding.cosine_distance(embedding).label("distance")
+        if self._session.get_bind().dialect.name == "postgresql":
+            qdist = Node.embedding.cosine_distance(embedding).label("qdist")
             rows = self._session.execute(
-                select(Node, distance)
+                select(Node, qdist)
                 .where(*filters)
-                .order_by(distance.asc(), Node.id.asc())
+                .order_by(qdist.asc(), Node.id.asc())
                 .limit(limit)
             ).all()
-            return [
-                NodeHit(node=node, distance=float(distance))
-                for node, distance in rows
-            ]
+            return [NodeHit(node=node, distance=float(qdist)) for node, qdist in rows]
 
         nodes = self._session.scalars(
             select(Node).where(*filters).order_by(Node.id.asc())
@@ -99,10 +96,6 @@ class NodeRepo:
         ]
         hits.sort(key=lambda hit: (hit.distance, str(hit.node.id)))
         return hits[:limit]
-
-    def vector_sql_enabled(self) -> bool:
-        """Return whether this session can execute pgvector distance SQL."""
-        return self._session.get_bind().dialect.name == "postgresql"
 
     async def count(self, id: UUID) -> int:
         count = self._session.scalar(

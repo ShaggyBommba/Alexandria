@@ -11,7 +11,12 @@ from sqlalchemy.pool import StaticPool
 from application.app import App
 import application.app as app_module
 from domain.entity import Base, Document, Node, VECTOR_DIMENSIONS
-from infrastructure.config import IngestSettings, Settings
+from infrastructure.config import (
+    IngestSettings,
+    RankerSettings,
+    Settings,
+    SplitterSettings,
+)
 
 
 class MemoryDb:
@@ -86,7 +91,12 @@ def make_app(monkeypatch) -> tuple[App, MemoryDb, FakeEmbedder]:
         lambda _provider, _settings: FakeSummarizer(),
     )
 
-    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=100))
+    settings = Settings(
+        _env_file=None,
+        ingest=IngestSettings(max_leaf_docs=100),
+        splitter=SplitterSettings(),
+        ranker=RankerSettings(),
+    )
     return App(settings), db, embedder
 
 

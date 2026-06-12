@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+from typing import TypeGuard
 from uuid import UUID
 
 from application.exceptions import MissingUnitOfWork, SplitDependencyError, SplitPlanError
 from application.ports import ChildPlan, FullnessPolicy, SplitPlan, Splitter, UnitOfWork
 from domain.entity import Document, Node
+
+logger = logging.getLogger(__name__)
 
 
 class Split:
@@ -26,6 +30,7 @@ class Split:
 
     async def run(self, node_id: UUID) -> None:
         """Split one node after validating local documents and assignments."""
+        logger.info("split started node_id=%s", node_id)
         if self.uow is None:
             raise MissingUnitOfWork("Split requires a UnitOfWork")
         if self.splitter is None:
@@ -36,42 +41,57 @@ class Split:
         uow = self.uow
         source = await uow.nodes.get(node_id)
         if not self.eligible(source):
+            logger.info("split skipped ineligible node_id=%s", node_id)
             return
 
         docs = await uow.docs.leaf(node_id)
         if not self.fullness.full(len(docs)):
+            logger.info("split skipped not full node_id=%s doc_count=%s", node_id, len(docs))
             return
 
         split_source = copy_node(source)
         split_docs = [copy_doc(doc) for doc in docs]
+        logger.info("split claiming node_id=%s doc_count=%s", node_id, len(docs))
         source.status = "splitting"
         source.doc_count = len(docs)
         await uow.nodes.save(source)
         await uow.commit()
 
         try:
+            logger.info("split calling splitter node_id=%s doc_count=%s", node_id, len(split_docs))
             plan = await self.splitter.split(split_source, split_docs)
         except Exception:
+            logger.exception("splitter failed node_id=%s", node_id)
             await self.release(node_id)
             raise
+        logger.info("splitter returned node_id=%s children=%s", node_id, len(plan.children))
 
         source = await uow.nodes.get(node_id)
         if not self.claimed(source):
+            logger.info("split abandoned unclaimed node_id=%s", node_id)
             await uow.rollback()
             return
 
         docs = await uow.docs.leaf(node_id)
         if not self.fullness.full(len(docs)):
+            logger.info("split releasing no longer full node_id=%s doc_count=%s", node_id, len(docs))
             await self.release(node_id)
             return
 
         try:
             children = self.validate(plan, docs)
         except SplitPlanError:
+            logger.exception("split rejected plan node_id=%s", node_id)
             await self.release(node_id)
             raise
 
         for child in children:
+            logger.info(
+                "split creating child node_id=%s child_name=%s docs=%s",
+                node_id,
+                child.name,
+                len(child.docs),
+            )
             child_node = Node(
                 parent_id=source.id,
                 name=child.name,
@@ -91,12 +111,13 @@ class Split:
         await uow.refs.clear(source.id)
         await uow.nodes.save(source)
         await uow.commit()
+        logger.info("split committed node_id=%s children=%s", node_id, len(children))
 
-    def eligible(self, node: Node | None) -> bool:
+    def eligible(self, node: Node | None) -> TypeGuard[Node]:
         """Return whether a node is a current leaf candidate for splitting."""
         return node is not None and node.status == "active" and node.kind == "leaf"
 
-    def claimed(self, node: Node | None) -> bool:
+    def claimed(self, node: Node | None) -> TypeGuard[Node]:
         """Return whether this split still owns a claimed source leaf."""
         return node is not None and node.status == "splitting" and node.kind == "leaf"
 
@@ -107,6 +128,7 @@ class Split:
 
         source = await self.uow.nodes.get(node_id)
         if source is None or source.kind != "leaf" or source.status != "splitting":
+            logger.info("split release rollback node_id=%s", node_id)
             await self.uow.rollback()
             return
 
@@ -115,6 +137,7 @@ class Split:
         source.doc_count = len(docs)
         await self.uow.nodes.save(source)
         await self.uow.commit()
+        logger.info("split released node_id=%s doc_count=%s", node_id, len(docs))
 
     def validate(self, plan: SplitPlan, docs: list[Document]) -> list[ChildPlan]:
         """Validate an untrusted split plan against current local documents."""

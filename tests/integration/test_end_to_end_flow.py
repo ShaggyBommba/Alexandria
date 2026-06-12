@@ -13,7 +13,12 @@ import application.app as app_module
 from application.ports import ChildPlan, DocIn, SplitPlan
 from domain.entity import Base, Document, Job, Node, VECTOR_DIMENSIONS
 from domain.values import JobKind, JobStatus
-from infrastructure.config import IngestSettings, Settings
+from infrastructure.config import (
+    IngestSettings,
+    RankerSettings,
+    Settings,
+    SplitterSettings,
+)
 from presentation.worker.app import Worker
 
 
@@ -125,7 +130,12 @@ async def test_end_to_end_local_lifecycle_ingests_retrieves_splits_and_retrieves
         lambda _provider, _settings: summarizer,
     )
 
-    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=3))
+    settings = Settings(
+        _env_file=None,
+        ingest=IngestSettings(max_leaf_docs=3),
+        splitter=SplitterSettings(),
+        ranker=RankerSettings(),
+    )
     docs = [
         DocIn(
             name="Alpha",

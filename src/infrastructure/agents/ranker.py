@@ -11,7 +11,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, SecretStr, ValidationError
 
 from application.ports import DocHit
 from application.ports import Ranker as RankerPort
@@ -165,8 +165,8 @@ def make_ranker(
         return None
 
     if provider is RankerProvider.OPENAI:
-        api_key = (settings.api_key or "").strip()
-        if not api_key:
+        api_key: SecretStr | None = settings.api_key
+        if api_key is None or not api_key.get_secret_value().strip():
             raise RankerConfigError("ranker provider openai requires an api_key")
         return LangRanker(
             client=ChatOpenAI(

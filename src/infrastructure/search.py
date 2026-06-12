@@ -3,14 +3,13 @@ from __future__ import annotations
 from logging import getLogger
 from math import isfinite
 import re
-from src.application.ports import SearchPolicy
 from uuid import UUID
 
 from rank_bm25 import BM25Okapi
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from application.ports import DocHit
+from application.ports import DocHit, SearchPolicy
 from domain.entity import Document
 from infrastructure.utils.vector import cosine_distance
 

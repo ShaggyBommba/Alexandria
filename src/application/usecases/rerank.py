@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from application.ports import DocHit, Ranker
+
+logger = logging.getLogger(__name__)
 
 
 class Rerank:
@@ -27,10 +31,17 @@ class Rerank:
         self, query: str, hits: list[DocHit], limit: int = 10
     ) -> list[DocHit]:
         """Return ranked document hits using the adapter or deterministic scores."""
+        logger.info("rerank started query_len=%s hits=%s limit=%s", len(query), len(hits), limit)
         if limit <= 0:
+            logger.info("rerank skipped because limit is not positive")
             return []
 
         if self.ranker is not None:
-            return await self.ranker.rank(query, hits, limit)
+            logger.info("rerank calling ranker hits=%s", len(hits))
+            ranked = await self.ranker.rank(query, hits, limit)
+            logger.info("rerank finished ranked_hits=%s", len(ranked))
+            return ranked
 
-        return sorted(hits, key=lambda hit: hit.score, reverse=True)[:limit]
+        ranked = sorted(hits, key=lambda hit: hit.score, reverse=True)[:limit]
+        logger.info("rerank finished deterministic_hits=%s", len(ranked))
+        return ranked

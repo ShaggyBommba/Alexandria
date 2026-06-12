@@ -5,7 +5,7 @@ import pytest
 from application.app import App
 from application.policy import MaxDocsFullness
 from application.ports import SplitPlan
-from infrastructure.config import IngestSettings, Settings
+from infrastructure.config import IngestSettings, RankerSettings, Settings, SplitterSettings
 
 
 class FakeDb:
@@ -123,13 +123,20 @@ class FakeRanker:
         return hits[:limit]
 
 
+def local_settings(**values) -> Settings:
+    """Return settings isolated from optional provider env vars."""
+    values.setdefault("splitter", SplitterSettings())
+    values.setdefault("ranker", RankerSettings())
+    return Settings(_env_file=None, **values)
+
+
 def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     monkeypatch,
 ) -> None:
     # Arrange
     import application.app as app_module
 
-    fake_db = FakeDb(Settings())
+    fake_db = FakeDb(local_settings())
     factory_calls: list[str] = []
     deferred_summarizer = DeferredSummarizer()
 
@@ -149,7 +156,7 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     monkeypatch.setattr(app_module, "make_summarizer", make_summarizer_factory)
 
     # Act
-    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=7))
+    settings = local_settings(ingest=IngestSettings(max_leaf_docs=7))
     app = App(settings)
 
     # Assert
@@ -192,15 +199,15 @@ def test_app_wires_read_and_write_dependencies_with_a_session_factory(
     assert app.ingest_case.fullness is app.fullness
     assert isinstance(app.fullness, MaxDocsFullness)
     assert app.fullness.max_docs == 7
-    assert factory_calls == []
+    assert factory_calls == ["called"]
 
 
 @pytest.mark.asyncio
-async def test_app_constructs_summarizer_on_first_use(monkeypatch) -> None:
+async def test_app_summarizer_summarizes_through_made_summarizer(monkeypatch) -> None:
     # Arrange
     import application.app as app_module
 
-    fake_db = FakeDb(Settings())
+    fake_db = FakeDb(local_settings())
     deferred = DeferredSummarizer()
 
     monkeypatch.setattr(app_module, "Db", lambda settings: fake_db)
@@ -215,7 +222,7 @@ async def test_app_constructs_summarizer_on_first_use(monkeypatch) -> None:
         app_module, "make_summarizer", lambda _provider, _settings: deferred
     )
 
-    settings = Settings(_env_file=None, ingest=IngestSettings(max_leaf_docs=7))
+    settings = local_settings(ingest=IngestSettings(max_leaf_docs=7))
     app = App(settings)
 
     # Act
@@ -229,7 +236,7 @@ def test_app_accepts_splitter_ranker_and_fullness_injection(monkeypatch) -> None
     # Arrange
     import application.app as app_module
 
-    fake_db = FakeDb(Settings())
+    fake_db = FakeDb(local_settings())
     splitter = FakeSplitter()
     ranker = FakeRanker()
     fullness = FakeFullness()
@@ -248,7 +255,7 @@ def test_app_accepts_splitter_ranker_and_fullness_injection(monkeypatch) -> None
 
     # Act
     app = App(
-        Settings(_env_file=None),
+        local_settings(),
         splitter=splitter,
         ranker=ranker,
         fullness=fullness,

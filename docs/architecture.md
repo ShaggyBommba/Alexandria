@@ -180,10 +180,14 @@ Current concrete adapters for these ports:
   summarizer configuration is validated when the adapter is first used.
 - `LangSplitter` in `src/infrastructure/agents/splitter.py` implements
   `Splitter` through a LangChain chat model and structured `SplitPlan`
-  validation. It is disabled by default through `Settings.splitter.provider =
-  "none"` and can be enabled with explicit provider config. Missing
-  provider-backed splitter API keys raise `SplitterConfigError`. Tests and
-  notebooks may still inject local fake splitters directly into `App`.
+  validation. The chat model returns each child's name, description, and
+  assigned document ids; child embeddings are derived by embedding the child
+  description through the configured `Embedder`, not returned by the model, so
+  they stay compatible with the configured vector dimension. It is disabled by
+  default through `Settings.splitter.provider = "none"` and can be enabled with
+  explicit provider config. Missing provider-backed splitter API keys raise
+  `SplitterConfigError`. Tests and notebooks may still inject local fake
+  splitters directly into `App`.
 - `LangRanker` in `src/infrastructure/agents/ranker.py` implements `Ranker`
   through a LangChain chat model and structured ranked document ids. It is
   disabled by default through `Settings.ranker.provider = "none"`, rejects
@@ -227,9 +231,12 @@ an empty database.
 Provider construction is lazy where metadata paths should stay cheap:
 
 - embeddings are built on first `embed(...)`
-- summarization is built on first `summarize(...)`
 - splitter and ranker construction only happens when an injected fake is not
   supplied and their provider setting is enabled
+
+The summarizer is built eagerly through `make_summarizer` during `App`
+construction, so a configured provider-backed summarizer requires its API key
+when an `App` is created.
 
 Metadata entrypoints stay lightweight. API `GET /health` and `GET /version`
 return configured process metadata without constructing a workflow `App` when
